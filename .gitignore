@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Downloaded market data (re-creatable with scripts/download_data.py)
+data/raw/*
+data/processed/*
+data/results/
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.parquet.tmp
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
