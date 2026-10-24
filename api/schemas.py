@@ -190,6 +190,7 @@ class HealthResponse(BaseModel):
     scan_cached: bool
     data_as_of: str | None
     offline_mode: bool
+    downloads_enabled: bool  # False: POST /api/refresh?download=true is rejected (read-only deployment)
     refresh: RefreshStatus
 
 
@@ -204,4 +205,5 @@ class MetaResponse(BaseModel):
     strategy: StrategyInfo
     data_source: DataSourceInfo
     offline_mode: bool
+    downloads_enabled: bool
     backtest_defaults: BacktestDefaults

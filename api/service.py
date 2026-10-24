@@ -70,6 +70,11 @@ def offline_mode() -> bool:
     return os.environ.get("ALTRIX_OFFLINE") == "1"
 
 
+def downloads_enabled() -> bool:
+    """False on read-only deployments (ALTRIX_DISABLE_DOWNLOAD=1), where new data arrives by redeploying."""
+    return os.environ.get("ALTRIX_DISABLE_DOWNLOAD") != "1"
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -360,6 +365,7 @@ class AltrixService:
             "scan_cached": cached is not None,
             "data_as_of": None if cached is None else iso_date(cached.result.as_of),
             "offline_mode": offline_mode(),
+            "downloads_enabled": downloads_enabled(),
             "refresh": self.job.to_dict(),
         }
 

@@ -1,0 +1,110 @@
+# Deploys the read-only Altrix API to Vercel with fresh market data.
+#
+# Weekdays after the NSE close: restore the stored Parquet files from the Actions cache,
+# fetch only new daily bars (scripts/download_data.py), stage the API with
+# scripts/stage_api_deploy.py and deploy that folder. Also runs when API code changes on
+# main, and manually from the Actions tab (Run workflow).
+#
+# Needs repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID (README,
+# "Deployment"). Until they exist the deploy job is skipped rather than failing.
+name: Deploy API
+
+on:
+  schedule:
+    - cron: "30 12 * * 1-5"  # 18:00 IST Mon-Fri; GitHub may start scheduled runs late
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "src/**"
+      - "app/__init__.py"
+      - "app/dashboard.py"
+      - "app/scanner_ui.py"
+      - "deploy/vercel-api/**"
+      - "scripts/download_data.py"
+      - "scripts/stage_api_deploy.py"
+      - "data/raw/nifty100_constituents.csv"
+      - "requirements.txt"
+      - ".github/workflows/deploy-api.yml"
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.secrets.outputs.configured }}
+    steps:
+      - id: secrets
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Vercel secrets are not set, so the API deploy is skipped. See README, Deployment."
+          fi
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"  # same as deploy/vercel-api/.python-version
+          cache: pip
+
+      - name: Install dependencies
+        # The deploy pins as constraints, so the tests run on the versions Vercel installs.
+        run: pip install -r requirements.txt -c deploy/vercel-api/requirements.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Restore market data
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data/processed
+            data/raw
+          key: market-data-${{ github.run_id }}
+          restore-keys: market-data-
+
+      - name: Download new bars
+        # Exit code 1 means some symbols failed or did not validate: deploy what is stored.
+        run: python scripts/download_data.py || echo "::warning::download_data.py reported failures; deploying the stored data"
+
+      - name: Save market data
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data/processed
+            data/raw
+          key: market-data-${{ github.run_id }}
+
+      - name: Stage API
+        run: python scripts/stage_api_deploy.py "$RUNNER_TEMP/altrix-api"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Deploy to Vercel
+        run: npx --yes vercel@63.1.2 deploy --prod --yes --token "$VERCEL_TOKEN" --cwd "$RUNNER_TEMP/altrix-api"

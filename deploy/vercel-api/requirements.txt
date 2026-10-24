@@ -1,0 +1,10 @@
+# Runtime dependencies of the Vercel API deployment, pinned to the versions the test suite runs on.
+# CI also installs the root requirements.txt with these as constraints (-c), so tests and deploy match.
+fastapi==0.146.0
+starlette==1.7.0
+pydantic==2.14.1
+pandas==2.3.3
+numpy==2.4.6
+pyarrow==25.0.1
+# Imported by app/dashboard.py and app/scanner_ui.py, which the API reuses; the API never draws charts.
+plotly==7.1.0

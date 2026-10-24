@@ -5,6 +5,7 @@
 Environment:
     ALTRIX_CORS_ORIGINS  comma-separated allowed origins (default http://localhost:3000,http://127.0.0.1:3000)
     ALTRIX_DATA_DIR / ALTRIX_RAW_DIR / ALTRIX_OFFLINE  as for the Streamlit app
+    ALTRIX_DISABLE_DOWNLOAD=1  reject POST /api/refresh?download=true (read-only deployments such as Vercel)
 """
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ from app import dashboard as dash
 
 from . import __version__
 from . import schemas as s
-from .service import STRATEGY, DATA_SOURCE, AltrixService, DataUnavailableError, NotFoundError, iso_date, num, offline_mode
+from .service import (STRATEGY, DATA_SOURCE, AltrixService, DataUnavailableError, NotFoundError, downloads_enabled,
+                      iso_date, num, offline_mode)
 
 logger = logging.getLogger("altrix.api")
 
@@ -88,6 +90,7 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
             "strategy": STRATEGY,
             "data_source": DATA_SOURCE,
             "offline_mode": offline_mode(),
+            "downloads_enabled": downloads_enabled(),
             "backtest_defaults": {"initial_capital": d.initial_capital, "transaction_cost": d.transaction_cost,
                                   "max_position_weight": d.max_position_weight},
         }
@@ -151,6 +154,8 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
         """Rescan the stored data now, or start the incremental downloader (202; poll GET /api/refresh)."""
         if not download:
             return svc.rescan()
+        if not downloads_enabled():
+            raise HTTPException(403, "Downloads are disabled on this deployment; new data arrives with each redeploy")
         status, started = svc.start_download()
         return JSONResponse(status_code=202 if started else 409, content=status)
 

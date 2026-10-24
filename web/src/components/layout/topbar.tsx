@@ -51,8 +51,10 @@ function MobileNav() {
 }
 
 function RefreshMenu() {
-  const { refreshing, rescan, downloadLatest, scanner } = useScanner();
+  const { refreshing, rescan, downloadLatest, scanner, health } = useScanner();
   const busy = refreshing !== null;
+  // Read-only deployments (e.g. Vercel) get new data by redeploying, so the API rejects downloads.
+  const canDownload = health.data?.downloads_enabled !== false;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -76,15 +78,17 @@ function RefreshMenu() {
             <div className="text-xs text-muted-foreground">Recompute signals from the data already on disk.</div>
           </div>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void downloadLatest()} className="items-start gap-2.5 py-2">
-          <CloudDownload className="mt-0.5 size-4" aria-hidden />
-          <div>
-            <div className="text-[13px] font-medium">Download new bars</div>
-            <div className="text-xs text-muted-foreground">
-              Fetch only end-of-day bars newer than the stored data from Yahoo Finance, then rescan. About a minute.
+        {canDownload && (
+          <DropdownMenuItem onSelect={() => void downloadLatest()} className="items-start gap-2.5 py-2">
+            <CloudDownload className="mt-0.5 size-4" aria-hidden />
+            <div>
+              <div className="text-[13px] font-medium">Download new bars</div>
+              <div className="text-xs text-muted-foreground">
+                Fetch only end-of-day bars newer than the stored data from Yahoo Finance, then rescan. About a minute.
+              </div>
             </div>
-          </div>
-        </DropdownMenuItem>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

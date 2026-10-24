@@ -11,6 +11,8 @@ data/processed/*
 data/results/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+# Committed so CI and the Vercel API work when NSE blocks cloud IPs (refreshed by download_data.py)
+!data/raw/nifty100_constituents.csv
 *.parquet.tmp
 
 # Editors / OS

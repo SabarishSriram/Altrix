@@ -85,10 +85,17 @@ export function SettingsView() {
         <Row label="Max position weight">{m ? formatFraction(m.backtest_defaults.max_position_weight, { signed: false, decimals: 0 }) : "—"}</Row>
       </Section>
 
-      <Section title="Updating data" description="Nothing downloads automatically.">
-        <Row label="From the app">Refresh → Download new bars (incremental, end-of-day only).</Row>
-        <Row label="From the command line"><code className={code}>python scripts/download_data.py</code></Row>
-      </Section>
+      {m && !m.downloads_enabled ? (
+        <Section title="Updating data" description="This deployment is read-only (ALTRIX_DISABLE_DOWNLOAD=1).">
+          <Row label="From the app">Disabled. Refresh → Rescan stored data still works.</Row>
+          <Row label="New data">Arrives with each redeploy of the API (see Deployment in the repository README).</Row>
+        </Section>
+      ) : (
+        <Section title="Updating data" description="Nothing downloads automatically.">
+          <Row label="From the app">Refresh → Download new bars (incremental, end-of-day only).</Row>
+          <Row label="From the command line"><code className={code}>python scripts/download_data.py</code></Row>
+        </Section>
+      )}
     </div>
   );
 }

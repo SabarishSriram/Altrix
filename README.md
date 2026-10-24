@@ -410,6 +410,7 @@ data changes, so later requests are fast.
 | `ALTRIX_DATA_DIR` | API | `data/processed` | processed Parquet folder |
 | `ALTRIX_RAW_DIR` | API | `data/raw` | constituent snapshot folder |
 | `ALTRIX_OFFLINE` | API | unset | `1` = read the constituent list only from the local snapshot |
+| `ALTRIX_DISABLE_DOWNLOAD` | API | unset | `1` = reject `POST /api/refresh?download=true` with 403 and hide *Download new bars* in the web app (read-only deployments) |
 
 ### Endpoints
 
@@ -422,7 +423,7 @@ data changes, so later requests are fast.
 | GET | `/api/signals/recent?days=30` | past crossovers and per-day BUY/SELL counts (context only) |
 | GET | `/api/backtest?initial_capital=&transaction_cost=&max_position_weight=&years=` (or `start=&end=`) | runs `run_backtest`; `years` looks back from the latest stored date: metrics, equity curve, trades, open positions |
 | POST | `/api/refresh` | rescan the stored data now |
-| POST | `/api/refresh?download=true` | start the incremental downloader in the background (202, or 409 if one is running) |
+| POST | `/api/refresh?download=true` | start the incremental downloader in the background (202, 409 if one is running, 403 if `ALTRIX_DISABLE_DOWNLOAD=1`) |
 | GET | `/api/refresh` | status of the latest rescan or download |
 
 Symbols are NSE tickers (`RELIANCE.NS` or `RELIANCE`). URL-encode `&`: `M%26M.NS`. Invalid symbols return
@@ -447,6 +448,61 @@ returns are fractions (0.05 = +5%), as in the backtester.
   `scripts/download_data.py`, then a rescan). Nothing downloads automatically.
 
 The Streamlit app (`streamlit run app/streamlit_app.py`) still works and is unchanged.
+
+## Deployment (Vercel, free tier)
+
+Both halves run on Vercel as two projects:
+
+```
+altrix-web  (Next.js, web/, deployed from GitHub on every push)
+    -> altrix-api  (FastAPI as one Vercel Function, deployed by GitHub Actions with the data bundled in)
+```
+
+Vercel Functions have no persistent disk and stop between requests, so the deployed API is **read-only**:
+`ALTRIX_OFFLINE=1` and `ALTRIX_DISABLE_DOWNLOAD=1` are set by `deploy/vercel-api/index.py`, and *Download new
+bars* is hidden. Fresh data comes from `.github/workflows/deploy-api.yml` instead. On weekdays at 18:00 IST it
+restores the stored Parquet files from the Actions cache, runs the tests, runs `scripts/download_data.py`
+(new bars only), stages the API with `scripts/stage_api_deploy.py` and deploys it. It also runs on pushes to
+`main` that touch the API, and from the Actions tab (*Run workflow*). The first run downloads the full 10 years.
+
+`scripts/stage_api_deploy.py OUT_DIR` copies only what the API needs (`api/`, `src/`, two `app/` modules, the
+Parquet files, the constituent snapshot and `deploy/vercel-api/`) into `OUT_DIR`. The API's dependencies are
+pinned in `deploy/vercel-api/requirements.txt` (about 310 MB installed; Vercel's Python limit is 500 MB), and CI
+runs the tests on those exact versions with Python 3.12, the version Vercel uses.
+
+### One-time setup
+
+1. Push this repository to GitHub.
+2. Create the API project without deploying it. Stage once and link the folder:
+
+   ```bash
+   python scripts/stage_api_deploy.py ../altrix-api-stage
+   npx vercel@63.1.2 link --cwd ../altrix-api-stage     # log in, create a new project named altrix-api
+   ```
+
+   `../altrix-api-stage/.vercel/project.json` now holds `orgId` and `projectId`. Do **not** connect this project
+   to the Git repository: a Git deployment would have no data. In the project's settings, add the environment
+   variable `ALTRIX_CORS_ORIGINS=https://<your-web-project>.vercel.app`.
+3. Create a token at <https://vercel.com/account/tokens>. In GitHub, go to *Settings → Secrets and variables →
+   Actions* and add `VERCEL_TOKEN`, `VERCEL_ORG_ID` (`orgId`) and `VERCEL_PROJECT_ID` (`projectId`). Until these
+   exist, the workflow skips the deploy.
+4. Run *Deploy API* from the Actions tab. Check `https://<api-project>.vercel.app/health`: `stored_symbols`
+   should be 100 and `downloads_enabled` false.
+5. In Vercel, import the GitHub repository as a second project: Root Directory `web`, environment variable
+   `NEXT_PUBLIC_API_BASE_URL=https://<api-project>.vercel.app`. It is read at build time, so redeploy after
+   changing it.
+
+The API runs in Mumbai (`bom1`, set in `deploy/vercel-api/vercel.json`).
+
+### Limitations
+
+- The first request to a cold API instance scans every stock: about 5-15 s. A first 10-year backtest loads all
+  the data: about 10 s. Later requests reuse the in-memory cache.
+- Data updates once per weekday, after GitHub starts the scheduled run (it can start late).
+  *Refresh → Rescan stored data* still works but only re-reads the deployed data.
+- Only the origins in `ALTRIX_CORS_ORIGINS` can call the API, so Vercel preview deployments of the frontend
+  can't call it unless you add their URLs.
+- The API has no authentication. It is read-only, but anyone with the URL can run backtests.
 
 ## Code layout
 
@@ -481,6 +537,10 @@ web/                 Next.js frontend (App Router, Tailwind, shadcn/ui, lightwei
 scripts/
   download_data.py   download / update data
   run_backtest.py    backtest the baseline strategy, save results to data/results/
+  stage_api_deploy.py  assemble the API + data folder that is deployed to Vercel
+deploy/vercel-api/   Vercel entrypoint (index.py), pinned runtime requirements, Python version, vercel.json
+.github/workflows/
+  deploy-api.yml     weekday data update + API deploy to Vercel
 tests/               offline pytest suite (fake providers, synthetic data, headless AppTest)
 ```
 

@@ -46,6 +46,7 @@ def test_health_never_scans(client, service):
     assert body["stored_symbols"] == 5
     assert body["scan_cached"] is False and service.scan_cached() is None
     assert body["offline_mode"] is True
+    assert body["downloads_enabled"] is True
     assert body["refresh"]["state"] == "idle"
 
 
@@ -260,6 +261,20 @@ def test_download_runs_in_background(world):
     assert status["state"] == "succeeded" and status["kind"] == "download"
     assert status["up_to_date"] == 6 and status["new_rows"] == 0
     assert seen and "BUYCO.NS" in seen[0]
+
+
+def test_download_disabled_on_read_only_deployment(world, monkeypatch):
+    monkeypatch.setenv("ALTRIX_DISABLE_DOWNLOAD", "1")
+    processed, _ = world
+    calls = []
+    c = TestClient(create_app(AltrixService(data_dir=processed, refresher=lambda s, store: calls.append(s) or []),
+                              warm=False))
+    r = c.post("/api/refresh?download=true")
+    assert r.status_code == 403 and "disabled" in r.json()["detail"]
+    assert calls == [] and c.get("/api/refresh").json()["state"] == "idle"
+    assert c.get("/health").json()["downloads_enabled"] is False
+    assert c.get("/api/meta").json()["downloads_enabled"] is False
+    assert c.post("/api/refresh").json()["state"] == "succeeded"  # rescanning stored data still works
 
 
 def test_cors_allows_local_frontend(client):

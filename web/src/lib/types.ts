@@ -210,6 +210,8 @@ export interface HealthResponse {
   scan_cached: boolean;
   data_as_of: string | null;
   offline_mode: boolean;
+  /** False on read-only deployments: the API rejects downloads and data arrives with each redeploy. */
+  downloads_enabled: boolean;
   refresh: RefreshStatus;
 }
 
@@ -218,6 +220,7 @@ export interface MetaResponse {
   strategy: StrategyInfo;
   data_source: DataSourceInfo;
   offline_mode: boolean;
+  downloads_enabled: boolean;
   backtest_defaults: {
     initial_capital: number;
     transaction_cost: number;
