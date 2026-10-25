@@ -25,6 +25,12 @@ altrix/
 `data/processed/`) are relative to `server/`. Frontend commands run from `client/`.
 
 ---
+## Screenshots
+<img width="1470" height="837" alt="image" src="https://github.com/user-attachments/assets/c122f958-ab39-4f32-9ba8-9a635a8b0dfe" />
+
+<img width="1470" height="837" alt="image" src="https://github.com/user-attachments/assets/e7f97b7f-8282-4df6-9d74-23464b82875e" />
+
+
 
 ## What is OHLCV?
 
