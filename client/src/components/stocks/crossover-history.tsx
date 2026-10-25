@@ -5,11 +5,13 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { cn } from "cn";
 
 import { EmptyState } from "@/components/common/states";
+import { CHART } from "@/lib/chart-theme";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/types";
 
-const GAIN = "#16803c";
-const LOSS = "#c8372d";
+const GAIN = CHART.gain;
+const LOSS = CHART.loss;
+const TICK = { ...CHART.axisTick, fontSize: 11 };
 
 /** BUY/SELL crossovers per calendar year (counts of the strategy's own signals). */
 export function CrossoversByYear({ crossovers }: { crossovers: HistoryPoint[] }) {
@@ -31,13 +33,10 @@ export function CrossoversByYear({ crossovers }: { crossovers: HistoryPoint[] })
     <div className="h-48 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -24 }} barGap={2}>
-          <CartesianGrid vertical={false} stroke="#f0f0f0" />
-          <XAxis dataKey="year" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#737373" }} />
-          <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#737373" }} />
-          <Tooltip
-            cursor={{ fill: "#f5f5f5" }}
-            contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #e5e5e5", boxShadow: "none" }}
-          />
+          <CartesianGrid vertical={false} stroke={CHART.grid} />
+          <XAxis dataKey="year" tickLine={false} axisLine={false} tick={TICK} />
+          <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={TICK} />
+          <Tooltip cursor={{ fill: CHART.cursor }} contentStyle={CHART.tooltip} />
           <Bar dataKey="buy" name="BUY" fill={GAIN} radius={[2, 2, 0, 0]} maxBarSize={14} />
           <Bar dataKey="sell" name="SELL" fill={LOSS} radius={[2, 2, 0, 0]} maxBarSize={14} />
         </BarChart>
@@ -58,8 +57,8 @@ export function CrossoverTable({ crossovers, limit }: { crossovers: HistoryPoint
             <th scope="col" className="h-8 px-3 font-medium">Date</th>
             <th scope="col" className="h-8 px-3 font-medium">Signal</th>
             <th scope="col" className="h-8 px-3 text-right font-medium">Close</th>
-            <th scope="col" className="hidden h-8 px-3 text-right font-medium sm:table-cell">SMA20</th>
-            <th scope="col" className="hidden h-8 px-3 text-right font-medium sm:table-cell">SMA50</th>
+            <th scope="col" className="hidden h-8 px-3 text-right font-medium sm:table-cell">EMA20</th>
+            <th scope="col" className="hidden h-8 px-3 text-right font-medium sm:table-cell">EMA50</th>
           </tr>
         </thead>
         <tbody>
@@ -70,8 +69,8 @@ export function CrossoverTable({ crossovers, limit }: { crossovers: HistoryPoint
                 {c.signal === "BUY" ? "▲ BUY" : "▼ SELL"}
               </td>
               <td className="num px-3 py-1.5 text-right">{formatPrice(c.close)}</td>
-              <td className="num hidden px-3 py-1.5 text-right text-muted-foreground sm:table-cell">{formatPrice(c.sma20)}</td>
-              <td className="num hidden px-3 py-1.5 text-right text-muted-foreground sm:table-cell">{formatPrice(c.sma50)}</td>
+              <td className="num hidden px-3 py-1.5 text-right text-muted-foreground sm:table-cell">{formatPrice(c.ema20)}</td>
+              <td className="num hidden px-3 py-1.5 text-right text-muted-foreground sm:table-cell">{formatPrice(c.ema50)}</td>
             </tr>
           ))}
         </tbody>

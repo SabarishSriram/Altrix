@@ -80,9 +80,9 @@ export function ScannerView() {
         <Button variant="outline" size="sm" onClick={() => setQuery("")}>Clear search</Button>
       } />
     ) : filter === "BUY" ? (
-      <EmptyState title="No BUY signals today" description={`No stock had SMA20 cross above SMA50 on ${formatDate(data?.data_as_of)}.`} />
+      <EmptyState title="No BUY signals today" description={`No stock had EMA20 cross above EMA50 on ${formatDate(data?.data_as_of)}.`} />
     ) : filter === "SELL" ? (
-      <EmptyState title="No SELL signals today" description={`No stock had SMA20 cross below SMA50 on ${formatDate(data?.data_as_of)}.`} />
+      <EmptyState title="No SELL signals today" description={`No stock had EMA20 cross below EMA50 on ${formatDate(data?.data_as_of)}.`} />
     ) : (
       <EmptyState title="No stocks in this view" />
     );
@@ -160,7 +160,7 @@ export function ScannerView() {
       </div>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Signals come from the Python baseline strategy (20/50-day SMA crossover) on stored end-of-day data. A signal dated D uses D&apos;s
+        Signals come from the Python baseline strategy (20/50-day EMA crossover) on stored end-of-day data. A signal dated D uses D&apos;s
         close, so it is known only after the close; the backtester would act at the next trading day&apos;s open. Research only, not
         investment advice.
       </p>

@@ -40,9 +40,9 @@ class StockScan(BaseModel):
     previous_close: float | None  # the stock's previous stored bar (after cleaning)
     previous_date: str | None
     daily_change_pct: float | None
-    sma20: float | None
-    sma50: float | None
-    sma_difference: float | None  # sma20 - sma50
+    ema20: float | None
+    ema50: float | None
+    ema_difference: float | None  # ema20 - ema50
     signal: Signal
     signal_date: str | None  # set only for BUY/SELL on the scan date
     last_crossover: Crossover | None
@@ -79,8 +79,8 @@ class HistoryPoint(BaseModel):
     low: float | None
     close: float | None
     volume: int | None
-    sma20: float | None
-    sma50: float | None
+    ema20: float | None
+    ema50: float | None
     signal: Crossover | None  # the strategy's crossover on this day, if any
 
 
@@ -102,8 +102,8 @@ class RecentCrossover(BaseModel):
     name: str | None
     signal: Crossover
     close: float | None
-    sma20: float | None
-    sma50: float | None
+    ema20: float | None
+    ema50: float | None
 
 
 class DailySignalCount(BaseModel):
@@ -204,8 +204,8 @@ class SmartMoneyStock(BaseModel):
     pocket_pivot: bool
     institutional_accumulation: bool
     smart_money_active_10d: bool
-    sma20: float | None
-    sma50: float | None
+    ema20: float | None
+    ema50: float | None
     trend: Trend
     deliv_qty: float | None  # NSE deliverable quantity, when deliverable data is stored
     deliv_per: float | None  # percent of traded quantity
@@ -217,7 +217,7 @@ class SmartMoneyStock(BaseModel):
 class SmartMoneyRules(BaseModel):
     volume_window: int
     pocket_pivot_lookback: int
-    pocket_pivot_sma50_floor: float
+    pocket_pivot_ema50_floor: float
     accumulation_spike: float
     accumulation_clv: float
     memory_days: int

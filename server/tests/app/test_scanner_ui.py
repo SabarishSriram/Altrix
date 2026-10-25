@@ -88,7 +88,7 @@ def test_display_table_renames_without_changing_values(scan):
     table = ui.display_table(scan.table, ui.ALL_STOCKS_FIELDS)
     assert list(table.columns) == [ui.DISPLAY_COLUMNS[f] for f in ui.ALL_STOCKS_FIELDS]
     assert table["Close"].tolist() == scan.table["close"].tolist()
-    assert table["SMA 20"].tolist() == scan.table["sma20"].tolist()
+    assert table["EMA 20"].tolist() == scan.table["ema20"].tolist()
     assert "Insufficient historical data" in table["Signal"].tolist()
 
 
@@ -104,7 +104,7 @@ def test_stock_chart_shows_selected_symbol_and_strategy_crossovers(scan):
 def test_stock_chart_window_is_about_six_months():
     store_dates = pd.bdate_range("2025-01-01", periods=400)
     df = make_bars("LONG.NS", dates=store_dates).assign(buy_signal=False, sell_signal=False,
-                                                        sma20=100.0, sma50=100.0)
+                                                        ema20=100.0, ema50=100.0)
     from src.scanner import ScanResult
     result = ScanResult(table=pd.DataFrame(), strategy_frame=df, as_of=store_dates[-1], universe_size=1)
     x = pd.to_datetime(ui.stock_chart(result, "LONG.NS").data[0].x)
@@ -170,7 +170,7 @@ def test_page_shows_summary_and_current_signals(world):
     buy_table, sell_table = tables(at)[:2]
     assert buy_table["Symbol"].tolist() == ["BUYCO.NS"] and buy_table["Signal"].tolist() == ["BUY"]
     assert sell_table["Symbol"].tolist() == ["SELLCO.NS"]
-    assert "UPCO.NS" not in buy_table["Symbol"].tolist()  # above SMA50 but no new crossover
+    assert "UPCO.NS" not in buy_table["Symbol"].tolist()  # above EMA50 but no new crossover
 
     assert any("MISSING.NS" in w.value for w in at.warning)  # failed symbol reported
     all_table = tables(at)[-1]
@@ -198,7 +198,7 @@ def test_selecting_a_stock_shows_its_values(world, scan):
     m = {x.label: x.value for x in at.metric}
     d = scan.table.set_index("symbol").loc["UPCO.NS"]
     assert m["Current Price"] == dash.format_inr(d["close"], 2)
-    assert m["SMA20"] == dash.format_inr(d["sma20"], 2)
+    assert m["EMA20"] == dash.format_inr(d["ema20"], 2)
     assert m["Current Signal"] == "HOLD" and m["Signal Date"] == "—"
 
 

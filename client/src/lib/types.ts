@@ -29,9 +29,9 @@ export interface StockScan {
   previous_date: string | null;
   /** Percent, e.g. 1.25 = +1.25%. */
   daily_change_pct: number | null;
-  sma20: number | null;
-  sma50: number | null;
-  sma_difference: number | null;
+  ema20: number | null;
+  ema50: number | null;
+  ema_difference: number | null;
   signal: Signal;
   signal_date: string | null;
   last_crossover: Crossover | null;
@@ -68,8 +68,8 @@ export interface HistoryPoint {
   low: number | null;
   close: number | null;
   volume: number | null;
-  sma20: number | null;
-  sma50: number | null;
+  ema20: number | null;
+  ema50: number | null;
   signal: Crossover | null;
 }
 
@@ -91,8 +91,8 @@ export interface RecentCrossover {
   name: string | null;
   signal: Crossover;
   close: number | null;
-  sma20: number | null;
-  sma50: number | null;
+  ema20: number | null;
+  ema50: number | null;
 }
 
 export interface DailySignalCount {
@@ -276,8 +276,8 @@ export interface SmartMoneyStock {
   pocket_pivot: boolean;
   institutional_accumulation: boolean;
   smart_money_active_10d: boolean;
-  sma20: number | null;
-  sma50: number | null;
+  ema20: number | null;
+  ema50: number | null;
   trend: Trend;
   deliv_qty: number | null;
   /** Percent of traded quantity. */
@@ -300,7 +300,7 @@ export interface SmartMoneyResponse {
   rules: {
     volume_window: number;
     pocket_pivot_lookback: number;
-    pocket_pivot_sma50_floor: number;
+    pocket_pivot_ema50_floor: number;
     accumulation_spike: number;
     accumulation_clv: number;
     memory_days: number;

@@ -62,7 +62,7 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
     app = FastAPI(
         title="Altrix API",
         version=__version__,
-        description="Research API for the NIFTY 100 SMA20/SMA50 crossover scanner and backtester. "
+        description="Research API for the NIFTY 100 EMA20/EMA50 crossover scanner and backtester. "
                     "Historical end-of-day data only; not real-time, not investment advice.",
         lifespan=lifespan,
     )
@@ -113,7 +113,7 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
         start: date | None = Query(None, description="First date (inclusive)"),
         end: date | None = Query(None, description="Last date (inclusive)"),
     ):
-        """Daily bars with SMA20, SMA50 and the strategy's historical crossover signals."""
+        """Daily bars with EMA20, EMA50 and the strategy's historical crossover signals."""
         sym = normalize_symbol(symbol)
         if start and end and start > end:
             raise HTTPException(422, f"start {start} is after end {end}")
@@ -144,7 +144,7 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
         max_position_weight: float = Query(0.10, gt=0, le=1),
         min_position_weight: float = Query(0.05, ge=0, le=1, description="Skip a BUY whose budget is below this fraction of equity"),
         strategy: Literal["baseline", "smart_money"] = Query(
-            "baseline", description="smart_money: SMA 20/50 entries need 10-day Smart Money confirmation; "
+            "baseline", description="smart_money: EMA 20/50 entries need 10-day Smart Money confirmation; "
                                     "the response then also compares it with the baseline"),
         years: int | None = Query(None, ge=1, le=30, description="Lookback ending on the latest stored date (instead of start/end)"),
         start: date | None = Query(None),

@@ -45,8 +45,8 @@ STRATEGY = {
     "name": dash.STRATEGY_NAME,
     "short_window": SHORT_WINDOW,
     "long_window": LONG_WINDOW,
-    "buy_rule": "SMA20 crosses above SMA50: previous SMA20 <= SMA50 and current SMA20 > SMA50",
-    "sell_rule": "SMA20 crosses below SMA50: previous SMA20 >= SMA50 and current SMA20 < SMA50",
+    "buy_rule": "EMA20 crosses above EMA50: previous EMA20 <= EMA50 and current EMA20 > EMA50",
+    "sell_rule": "EMA20 crosses below EMA50: previous EMA20 >= EMA50 and current EMA20 < EMA50",
 }
 DATA_SOURCE = {
     "provider": "Yahoo Finance (yfinance), stored locally as Parquet",
@@ -203,9 +203,9 @@ class AltrixService:
             "previous_close": prev_close,
             "previous_date": None if prev is None else iso_date(prev["date"]),
             "daily_change_pct": change,
-            "sma20": num(row["sma20"]),
-            "sma50": num(row["sma50"]),
-            "sma_difference": num(row["sma_difference"]),
+            "ema20": num(row["ema20"]),
+            "ema50": num(row["ema50"]),
+            "ema_difference": num(row["ema_difference"]),
             "signal": row["signal"],
             "signal_date": iso_date(row["signal_date"]),
             "last_crossover": row["last_crossover"] or None,
@@ -282,7 +282,7 @@ class AltrixService:
             "trading_days": trading_days,
             "crossovers": [{
                 "date": iso_date(c["date"]), "symbol": c["symbol"], "name": names.get(c["symbol"]) or None,
-                "signal": c["signal"], "close": num(c["close"]), "sma20": num(c["sma20"]), "sma50": num(c["sma50"]),
+                "signal": c["signal"], "close": num(c["close"]), "ema20": num(c["ema20"]), "ema50": num(c["ema50"]),
             } for _, c in recent.iterrows()],
             "daily_counts": [{"date": iso_date(d), "buy": int(v["buy_signal"]), "sell": int(v["sell_signal"])}
                              for d, v in daily.iterrows()],
@@ -321,7 +321,7 @@ class AltrixService:
             "rules": {
                 "volume_window": sm.VOLUME_WINDOW,
                 "pocket_pivot_lookback": sm.POCKET_PIVOT_LOOKBACK,
-                "pocket_pivot_sma50_floor": sm.POCKET_PIVOT_SMA50_FLOOR,
+                "pocket_pivot_ema50_floor": sm.POCKET_PIVOT_EMA50_FLOOR,
                 "accumulation_spike": sm.ACCUMULATION_SPIKE,
                 "accumulation_clv": sm.ACCUMULATION_CLV,
                 "memory_days": sm.MEMORY_DAYS,
@@ -340,8 +340,8 @@ class AltrixService:
                 "pocket_pivot": bool(row.pocket_pivot),
                 "institutional_accumulation": bool(row.institutional_accumulation),
                 "smart_money_active_10d": bool(row.smart_money_active_10d),
-                "sma20": num(row.sma20),
-                "sma50": num(row.sma50),
+                "ema20": num(row.ema20),
+                "ema50": num(row.ema50),
                 "trend": row.trend,
                 "deliv_qty": num(row.deliv_qty),
                 "deliv_per": num(row.deliv_per),
@@ -463,7 +463,7 @@ def _point(row) -> dict:
         "low": num(row.low),
         "close": num(row.close),
         "volume": None if pd.isna(row.volume) else int(row.volume),
-        "sma20": num(row.sma20),
-        "sma50": num(row.sma50),
+        "ema20": num(row.ema20),
+        "ema50": num(row.ema50),
         "signal": signal,
     }

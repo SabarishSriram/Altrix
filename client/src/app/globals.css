@@ -118,10 +118,16 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  /* Brighter gain/loss on dark backgrounds; the soft tints become deep instead of pale. */
+  --gain: oklch(0.72 0.16 152);
+  --gain-soft: oklch(0.3 0.06 152);
+  --loss: oklch(0.7 0.18 25);
+  --loss-soft: oklch(0.31 0.07 25);
+  --surface: oklch(0.185 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.922 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);

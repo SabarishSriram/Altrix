@@ -22,7 +22,7 @@ const TRADE_PAGE = 50;
 const PERIODS = [1, 2, 3, 5, 10] as const;
 const DEFAULT_YEARS = 10;
 const DEFAULT_MIN_WEIGHT = 0.05;
-const SMART_MONEY_LABEL = "Require 10-Day Smart Money Confirmation for SMA 20/50 Entry";
+const SMART_MONEY_LABEL = "Require 10-Day Smart Money Confirmation for EMA 20/50 Entry";
 
 interface FormState {
   capital: string;
@@ -78,7 +78,7 @@ export function BacktestView() {
     years: DEFAULT_YEARS,
     smartMoney: false,
   };
-  const smartMoneyName = meta.data?.strategies.find((s) => s.key === "smart_money")?.name ?? "20 / 50 SMA + Smart Money";
+  const smartMoneyName = meta.data?.strategies.find((s) => s.key === "smart_money")?.name ?? "20 / 50 EMA + Smart Money";
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...f, [k]: e.target.value });
 
   const result = useResource(run ? JSON.stringify(run) : null, () => api.backtest(run!));
@@ -104,7 +104,7 @@ export function BacktestView() {
               className="flex h-8 items-center truncate rounded-md border bg-surface px-2.5 text-[13px]"
               title={f.smartMoney ? smartMoneyName : undefined}
             >
-              {f.smartMoney ? smartMoneyName : (meta.data?.strategy.name ?? "20 / 50 SMA Crossover")}
+              {f.smartMoney ? smartMoneyName : (meta.data?.strategy.name ?? "20 / 50 EMA Crossover")}
             </div>
           </Field>
           <Field id="bt-capital" label="Initial capital (₹)">
@@ -153,8 +153,8 @@ export function BacktestView() {
           <span>
             <span className="block text-[13px] font-medium">{SMART_MONEY_LABEL}</span>
             <span className="block text-xs text-muted-foreground">
-              BUY only when SMA20 crosses above SMA50 and a pocket pivot or institutional accumulation happened in the last 10 days, or
-              on a fresh pocket pivot within 5% of SMA20 while SMA20 is already above SMA50. SELL rule unchanged. Adds a side-by-side
+              BUY only when EMA20 crosses above EMA50 and a pocket pivot or institutional accumulation happened in the last 10 days, or
+              on a fresh pocket pivot within 5% of EMA20 while EMA20 is already above EMA50. SELL rule unchanged. Adds a side-by-side
               comparison with the baseline.
             </span>
           </span>
@@ -239,7 +239,7 @@ function ComparisonPanel({ rows }: { rows: ComparisonRow[] }) {
               <th scope="col" className="h-8 px-3 font-medium">Metric</th>
               {rows.map((r) => (
                 <th key={r.strategy.key} scope="col" className="h-8 px-3 text-right font-medium">
-                  {r.strategy.key === "baseline" ? "Baseline SMA 20/50" : "Smart-Money Filtered SMA 20/50"}
+                  {r.strategy.key === "baseline" ? "Baseline EMA 20/50" : "Smart-Money Filtered EMA 20/50"}
                 </th>
               ))}
             </tr>

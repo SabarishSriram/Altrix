@@ -38,12 +38,12 @@ def result(data):
 
 
 def flat_result():
-    """The real strategy on flat prices: SMA20 == SMA50 forever, so no crossover, no trades."""
+    """The real strategy on flat prices: EMA20 == EMA50 forever, so no crossover, no trades."""
     df = make_bars("FLAT.NS", days=80).assign(open=100.0, high=100.0, low=100.0, close=100.0)
     return run_backtest(df)
 
 
-def test_stock_chart_without_sma_columns():
+def test_stock_chart_without_ema_columns():
     df = make_bars("X.NS", days=10).assign(buy_signal=False, sell_signal=False)
     fig = dash.stock_figure(dash.stock_view(run_backtest_on_signals(df), "X.NS"))
     assert [t.name for t in fig.data] == ["Close"]
@@ -165,8 +165,8 @@ def test_stock_view_and_chart_use_selected_symbol_only(result):
     fig = dash.stock_figure(view)
     lines = {t.name: t for t in fig.data if t.mode == "lines"}
     assert list(lines["Close"].y) == sf["close"].tolist()
-    assert np.allclose(list(lines["SMA20"].y), sf["sma20"].tolist(), equal_nan=True)
-    assert np.allclose(list(lines["SMA50"].y), sf["sma50"].tolist(), equal_nan=True)
+    assert np.allclose(list(lines["EMA20"].y), sf["ema20"].tolist(), equal_nan=True)
+    assert np.allclose(list(lines["EMA50"].y), sf["ema50"].tolist(), equal_nan=True)
     markers = [t for t in fig.data if t.mode == "markers"]
     marker_dates = sorted(d for t in markers for d in pd.to_datetime(t.x))
     assert marker_dates == sorted(view.signals["signal_date"].tolist())

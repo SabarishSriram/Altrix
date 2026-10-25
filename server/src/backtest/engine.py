@@ -85,7 +85,7 @@ def run_backtest(
     min_position_weight: float = 0.05,
     strategy: Callable[[pd.DataFrame], pd.DataFrame] = generate_baseline_signals,
 ) -> BacktestResult:
-    """Backtest a strategy (default: the SMA20/SMA50 baseline) on daily OHLCV data.
+    """Backtest a strategy (default: the EMA20/EMA50 baseline) on daily OHLCV data.
 
     Args:
         df: Daily bars (at least date, symbol, open, close) for one or more
@@ -96,7 +96,7 @@ def run_backtest(
         benchmark: Optional close prices indexed by date (e.g. an index) for a
             buy-and-hold comparison. Never downloaded here.
         start: First trading date of the backtest (inclusive). History before
-            it is still used to warm up the SMAs, so signals on `start` are the
+            it is still used to warm up the EMAs, so signals on `start` are the
             same as in a full-history run. The portfolio starts in cash.
         end: Last trading date (inclusive). Data after it is removed before the
             strategy runs, so nothing after `end` can influence the result.

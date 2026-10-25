@@ -1,4 +1,4 @@
-"""Backtest the SMA20/SMA50 baseline strategy on the locally stored NIFTY 100 data.
+"""Backtest the EMA20/EMA50 baseline strategy on the locally stored NIFTY 100 data.
 
 Usage:
     python scripts/run_backtest.py
@@ -52,7 +52,7 @@ def main() -> int:
 
     pct = lambda x: "n/a" if x is None else f"{x:+.2%}"
     print("=" * 56)
-    print(f"Baseline SMA20/SMA50 backtest  ({len(cleaned)} stocks)")
+    print(f"Baseline EMA20/EMA50 backtest  ({len(cleaned)} stocks)")
     print("=" * 56)
     print(f"Period:               {m['start_date']} -> {m['end_date']} ({m['trading_days']} trading days)")
     print(f"Initial capital:      Rs {m['initial_capital']:,.0f}")

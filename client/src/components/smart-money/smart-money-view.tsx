@@ -77,7 +77,7 @@ const BASE_COLUMNS: Column[] = [
   { key: "pocket_pivot", label: "Pocket pivot", term: "POCKET_PIVOT" },
   { key: "institutional_accumulation", label: "Accumulation", term: "ACCUMULATION", className: "hidden lg:table-cell" },
   { key: "smart_money_active_10d", label: "10D active", term: "ACTIVE_10D", className: "hidden lg:table-cell" },
-  { key: "trend", label: "SMA 20/50", term: "TREND" },
+  { key: "trend", label: "EMA 20/50", term: "TREND" },
 ];
 const DELIVERY_COLUMNS: Column[] = [
   { key: "deliv_spike_ratio", label: "Delivery spike", term: "DELIV_SPIKE", align: "right" },
@@ -98,7 +98,7 @@ function YesNo({ value, strong }: { value: boolean; strong?: boolean }) {
 }
 
 function TrendBadge({ value }: { value: Trend }) {
-  const label = value === "UPTREND" ? "SMA20 > SMA50" : value === "DOWNTREND" ? "SMA20 ≤ SMA50" : "Not enough data";
+  const label = value === "UPTREND" ? "EMA20 > EMA50" : value === "DOWNTREND" ? "EMA20 ≤ EMA50" : "Not enough data";
   return (
     <span
       className={cn(

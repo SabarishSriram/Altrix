@@ -3,7 +3,7 @@
     streamlit run app/streamlit_app.py
 
 Two pages:
-  - Opportunity Scanner (default): NIFTY 100 stocks with a 20/50 SMA crossover
+  - Opportunity Scanner (default): NIFTY 100 stocks with a 20/50 EMA crossover
     signal on the latest trading day          -> app/views/scanner.py
   - Backtest: historical simulation of the same strategy -> app/views/backtest.py
 

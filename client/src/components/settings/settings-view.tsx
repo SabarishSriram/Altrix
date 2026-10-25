@@ -74,7 +74,7 @@ export function SettingsView() {
 
       <Section title="Strategy" description="Defined in server/src/strategy/baseline.py. Not configurable from the UI.">
         <Row label="Name">{m?.strategy.name ?? <Skeleton className="h-4 w-40" />}</Row>
-        <Row label="Windows">{m ? `SMA${m.strategy.short_window} / SMA${m.strategy.long_window} of daily closes` : <Skeleton className="h-4 w-40" />}</Row>
+        <Row label="Windows">{m ? `EMA${m.strategy.short_window} / EMA${m.strategy.long_window} of daily closes` : <Skeleton className="h-4 w-40" />}</Row>
         <Row label="BUY">{m?.strategy.buy_rule ?? "—"}</Row>
         <Row label="SELL">{m?.strategy.sell_rule ?? "—"}</Row>
       </Section>

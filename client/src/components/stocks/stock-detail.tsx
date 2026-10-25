@@ -63,7 +63,7 @@ export function StockDetail() {
   const h = history.data;
   if (!h) return <DetailSkeleton back={back} />;
   const stock = h.stock;
-  const enoughHistory = stock.sma50 !== null;
+  const enoughHistory = stock.ema50 !== null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -90,14 +90,14 @@ export function StockDetail() {
         <CrossoverContext stock={stock} />
       </section>
 
-      <Panel title="Price and moving averages" description="Daily close with SMA20 and SMA50. Markers are the strategy's crossover days.">
+      <Panel title="Price and moving averages" description="Daily close with EMA20 and EMA50. Markers are the strategy's crossover days.">
         {h.points.length === 0 ? (
           <EmptyState title="No price history stored" />
         ) : (
           <>
             {!enoughHistory && (
               <p className="mb-3 text-xs text-muted-foreground">
-                Only {h.total_bars} bars are stored; SMA50 needs 50, so no crossover signals can be generated yet.
+                Only {h.total_bars} bars are stored; EMA50 needs 50, so no crossover signals can be generated yet.
               </p>
             )}
             <ChartPanel points={h.points} height={460} initial="1Y" />

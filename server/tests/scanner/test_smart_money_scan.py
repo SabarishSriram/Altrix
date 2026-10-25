@@ -36,7 +36,7 @@ def test_ranked_by_volume_spike_with_latest_day_fields():
     assert big_row["return_1d_pct"] == pytest.approx((106.9 / 106.8 - 1) * 100)
     assert big_row["institutional_accumulation"] and big_row["pocket_pivot"] and big_row["smart_money_active_10d"]
     assert big_row["trend"] == "UPTREND"
-    assert not out.iloc[2]["pocket_pivot"] and out.iloc[2]["trend"] == "DOWNTREND"  # SMA20 == SMA50
+    assert not out.iloc[2]["pocket_pivot"] and out.iloc[2]["trend"] == "DOWNTREND"  # EMA20 == EMA50
 
 
 def test_short_history_has_no_trend():

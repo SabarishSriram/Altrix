@@ -18,23 +18,39 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { cn } from "cn";
+import { useTheme } from "next-themes";
 
+import { CANVAS_COLORS, type CanvasColors } from "@/lib/chart-theme";
 import { formatCompact, formatDate, formatPrice } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/types";
 
-// Canvas colours mirror the CSS tokens in globals.css (canvas cannot read CSS variables).
-const C = {
-  text: "#737373",
-  grid: "#f2f2f2",
-  border: "#e5e5e5",
-  close: "#171717",
-  sma20: "#7a7a7a",
-  sma50: "#2b2b2b",
-  volume: "#d9d9d9",
-  gain: "#16803c",
-  loss: "#c8372d",
-  crosshair: "#a3a3a3",
-};
+/** Chart, series and crosshair colours for one theme (canvas cannot read CSS variables). */
+function chartColors(C: CanvasColors) {
+  return {
+    layout: {
+      background: { type: ColorType.Solid, color: C.surface },
+      textColor: C.text,
+      panes: { separatorColor: C.border, separatorHoverColor: C.grid },
+    },
+    grid: { vertLines: { visible: false }, horzLines: { color: C.grid } },
+    rightPriceScale: { borderColor: C.border },
+    timeScale: { borderColor: C.border },
+    crosshair: {
+      vertLine: { color: C.crosshair, labelBackgroundColor: C.close },
+      horzLine: { color: C.crosshair, labelBackgroundColor: C.close },
+    },
+  };
+}
+
+function markerList(points: HistoryPoint[], C: CanvasColors): SeriesMarker<Time>[] {
+  return points
+    .filter((p) => p.signal !== null)
+    .map((p) =>
+      p.signal === "BUY"
+        ? { time: toTime(p.date), position: "belowBar", shape: "arrowUp", color: C.gain, size: 1 }
+        : { time: toTime(p.date), position: "aboveBar", shape: "arrowDown", color: C.loss, size: 1 },
+    );
+}
 
 const priceFmt = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -48,18 +64,24 @@ export interface PriceChartProps {
   className?: string;
 }
 
-/** Close with SMA20/SMA50 overlays, the strategy's BUY/SELL crossovers and optional volume. */
+/** Close with EMA20/EMA50 overlays, the strategy's BUY/SELL crossovers and optional volume. */
 export function PriceChart({ points, height = 420, showVolume = true, className }: PriceChartProps) {
   const container = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const series = useRef<{
     close: ISeriesApi<"Line">;
-    sma20: ISeriesApi<"Line">;
-    sma50: ISeriesApi<"Line">;
+    ema20: ISeriesApi<"Line">;
+    ema50: ISeriesApi<"Line">;
     volume: ISeriesApi<"Histogram"> | null;
     markers: ISeriesMarkersPluginApi<Time>;
   } | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const { resolvedTheme } = useTheme();
+  const C = CANVAS_COLORS[resolvedTheme === "dark" ? "dark" : "light"];
+  const colorsRef = useRef(C); // read by the create/data effects below; declared first so it syncs first
+  useEffect(() => {
+    colorsRef.current = C;
+  });
 
   const byTime = useMemo(() => new Map(points.map((p) => [toTime(p.date) as number, p])), [points]);
 
@@ -67,36 +89,32 @@ export function PriceChart({ points, height = 420, showVolume = true, className 
   useEffect(() => {
     const el = container.current;
     if (!el) return;
+    const C = colorsRef.current;
+    const themed = chartColors(C);
     const chart = createChart(el, {
       autoSize: true,
-      layout: {
-        background: { type: ColorType.Solid, color: "#ffffff" },
-        textColor: C.text,
-        fontSize: 11,
-        fontFamily: getComputedStyle(document.body).fontFamily,
-        panes: { separatorColor: C.border, separatorHoverColor: C.grid },
-      },
-      grid: { vertLines: { visible: false }, horzLines: { color: C.grid } },
-      rightPriceScale: { borderColor: C.border, scaleMargins: { top: 0.08, bottom: 0.06 } },
-      timeScale: { borderColor: C.border, fixLeftEdge: true, fixRightEdge: true, minBarSpacing: 0.2 },
+      layout: { ...themed.layout, fontSize: 11, fontFamily: getComputedStyle(document.body).fontFamily },
+      grid: themed.grid,
+      rightPriceScale: { ...themed.rightPriceScale, scaleMargins: { top: 0.08, bottom: 0.06 } },
+      timeScale: { ...themed.timeScale, fixLeftEdge: true, fixRightEdge: true, minBarSpacing: 0.2 },
       crosshair: {
         mode: CrosshairMode.Magnet,
-        vertLine: { color: C.crosshair, width: 1, style: LineStyle.Dashed, labelBackgroundColor: C.close },
-        horzLine: { color: C.crosshair, width: 1, style: LineStyle.Dashed, labelBackgroundColor: C.close },
+        vertLine: { ...themed.crosshair.vertLine, width: 1, style: LineStyle.Dashed },
+        horzLine: { ...themed.crosshair.horzLine, width: 1, style: LineStyle.Dashed },
       },
       localization: { priceFormatter: (p: number) => priceFmt.format(p) },
       handleScroll: { vertTouchDrag: false },
     });
     const line = { priceLineVisible: false, crosshairMarkerVisible: false, lastValueVisible: false } as const;
-    const sma50 = chart.addSeries(LineSeries, { ...line, color: C.sma50, lineWidth: 1, lineStyle: LineStyle.Dashed });
-    const sma20 = chart.addSeries(LineSeries, { ...line, color: C.sma20, lineWidth: 1 });
+    const ema50 = chart.addSeries(LineSeries, { ...line, color: C.ema50, lineWidth: 1, lineStyle: LineStyle.Dashed });
+    const ema20 = chart.addSeries(LineSeries, { ...line, color: C.ema20, lineWidth: 1 });
     const close = chart.addSeries(LineSeries, {
       color: C.close,
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: true,
       crosshairMarkerRadius: 3,
-      crosshairMarkerBorderColor: "#ffffff",
+      crosshairMarkerBorderColor: C.surface,
       crosshairMarkerBackgroundColor: C.close,
     });
     let volume: ISeriesApi<"Histogram"> | null = null;
@@ -111,7 +129,7 @@ export function PriceChart({ points, height = 420, showVolume = true, className 
     }
     const markers = createSeriesMarkers(close, []);
     chartRef.current = chart;
-    series.current = { close, sma20, sma50, volume, markers };
+    series.current = { close, ema20, ema50, volume, markers };
 
     const onMove = (param: MouseEventParams<Time>) => {
       setHoverTime(typeof param.time === "number" ? param.time : null);
@@ -129,22 +147,28 @@ export function PriceChart({ points, height = 420, showVolume = true, className 
   useEffect(() => {
     const s = series.current;
     if (!s) return;
-    const line = (key: "close" | "sma20" | "sma50") =>
+    const line = (key: "close" | "ema20" | "ema50") =>
       points.map((p) => (p[key] === null ? { time: toTime(p.date) } : { time: toTime(p.date), value: p[key] }));
     s.close.setData(line("close"));
-    s.sma20.setData(line("sma20"));
-    s.sma50.setData(line("sma50"));
+    s.ema20.setData(line("ema20"));
+    s.ema50.setData(line("ema50"));
     s.volume?.setData(points.map((p) => (p.volume === null ? { time: toTime(p.date) } : { time: toTime(p.date), value: p.volume })));
-    const markers: SeriesMarker<Time>[] = points
-      .filter((p) => p.signal !== null)
-      .map((p) =>
-        p.signal === "BUY"
-          ? { time: toTime(p.date), position: "belowBar", shape: "arrowUp", color: C.gain, size: 1 }
-          : { time: toTime(p.date), position: "aboveBar", shape: "arrowDown", color: C.loss, size: 1 },
-      );
-    s.markers.setMarkers(markers);
+    s.markers.setMarkers(markerList(points, colorsRef.current));
     chartRef.current?.timeScale().fitContent();
   }, [points, showVolume]);
+
+  // Recolour in place when the theme changes (no re-creation, so zoom and scroll are kept).
+  useEffect(() => {
+    const s = series.current;
+    const chart = chartRef.current;
+    if (!s || !chart) return;
+    chart.applyOptions(chartColors(C));
+    s.close.applyOptions({ color: C.close, crosshairMarkerBackgroundColor: C.close, crosshairMarkerBorderColor: C.surface });
+    s.ema20.applyOptions({ color: C.ema20 });
+    s.ema50.applyOptions({ color: C.ema50 });
+    s.volume?.applyOptions({ color: C.volume });
+    s.markers.setMarkers(markerList(points, C));
+  }, [C, points]);
 
   const shown = (hoverTime !== null ? byTime.get(hoverTime) : undefined) ?? points.at(-1);
 
@@ -155,8 +179,8 @@ export function PriceChart({ points, height = 420, showVolume = true, className 
           <>
             <span className="num font-medium">{formatDate(shown.date, "EEE, dd MMM yyyy")}</span>
             <LegendValue label="Close" value={formatPrice(shown.close)} swatch={<Swatch color={C.close} thick />} />
-            <LegendValue label="SMA20" value={formatPrice(shown.sma20)} swatch={<Swatch color={C.sma20} />} />
-            <LegendValue label="SMA50" value={formatPrice(shown.sma50)} swatch={<Swatch color={C.sma50} dashed />} />
+            <LegendValue label="EMA20" value={formatPrice(shown.ema20)} swatch={<Swatch color={C.ema20} />} />
+            <LegendValue label="EMA50" value={formatPrice(shown.ema50)} swatch={<Swatch color={C.ema50} dashed />} />
             {showVolume && <LegendValue label="Vol" value={formatCompact(shown.volume)} />}
             {shown.signal && (
               <span className={cn("font-semibold", shown.signal === "BUY" ? "text-gain" : "text-loss")}>
@@ -166,7 +190,7 @@ export function PriceChart({ points, height = 420, showVolume = true, className 
           </>
         ) : null}
       </div>
-      <div ref={container} style={{ height }} className="w-full" role="img" aria-label="Price chart with SMA20, SMA50 and crossover markers" />
+      <div ref={container} style={{ height }} className="w-full" role="img" aria-label="Price chart with EMA20, EMA50 and crossover markers" />
     </div>
   );
 }

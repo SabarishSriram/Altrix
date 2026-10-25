@@ -211,8 +211,9 @@ listed at the time traded on it (volume > 0). This means:
 (`report.corporate_action_suspects`, `large_price_drops()`), because Yahoo often leaves demergers unadjusted
 for a while. On the current data it flags `VEDL.NS` 2026-04-30 (−64.9%), `TMPV.NS` 2025-10-14 (−40.2%) and
 `IDEA.NS` 2020-03-18 (−35.1%, a real crash). The flag asks you to verify the price history; nothing is
-adjusted or removed, so the backtester still trades through these days. For example, the baseline buys VEDL on
-2026-04-17 and sells it on 2026-05-06 at −60.5%, a loss that the demerger, not the market, created.
+adjusted or removed, so the backtester still trades through these days. For example, the Smart Money strategy
+holds VEDL from 2025-10-15 and sells it on 2026-05-05 at −38.3%, a loss that the demerger, not the market,
+created.
 
 ## Loading clean data
 
@@ -283,7 +284,7 @@ downloads anything. Results go to `data/results/baseline_sma/`:
   `floor(budget / (open × (1 + cost)))`, so fees fit inside the budget and cash never goes negative.
 - **Minimum position.** A BUY is skipped unless its budget is at least `min_position_weight` (default 5%) of
   equity, so a nearly empty cash balance never buys a ₹1,000 "cash dust" position. The old rule split cash
-  equally and made 500 such sub-₹5,000 BUYs over 10 years; pass `min_position_weight=0` to allow small
+  equally and made 500 such sub-₹5,000 BUYs over 10 years (measured with the earlier SMA strategy); pass `min_position_weight=0` to allow small
   budgets again.
 - **Costs.** A flat `transaction_cost` (default 0.1%) on every BUY and SELL. No STT, GST,
   stamp duty or slippage yet.
@@ -309,13 +310,13 @@ that fell out of the index since 2016 are missing.
 |---|---|
 | `vol_spike_ratio` | `volume / volume.rolling(20).mean()` (today included) |
 | `clv` | close location value `(close - low) / (high - low)`: 1 = closed at the high; empty when high = low |
-| `pocket_pivot` | up close, **and** volume above every down-day volume of the prior 10 trading days (0 if there were none), **and** `close >= 0.95 × SMA50` |
+| `pocket_pivot` | up close, **and** volume above every down-day volume of the prior 10 trading days (0 if there were none), **and** `close >= 0.95 × EMA50` |
 | `institutional_accumulation` | up close, `vol_spike_ratio >= 2.0` and `clv >= 0.5` |
 | `smart_money_active_10d` | a pocket pivot or accumulation on any of the last 10 trading days (today included) |
 
-**Smart-money filtered SMA 20/50** (`generate_smart_money_signals`): the baseline SELL rule, but a BUY needs
-either an SMA20 ↑ SMA50 crossover **with** `smart_money_active_10d`, or a fresh pocket pivot that closes within
-5% of SMA20 while SMA20 was already above SMA50 (yesterday and today). The unfiltered crossover stays available
+**Smart-money filtered EMA 20/50** (`generate_smart_money_signals`): the baseline SELL rule, but a BUY needs
+either an EMA20 ↑ EMA50 crossover **with** `smart_money_active_10d`, or a fresh pocket pivot that closes within
+5% of EMA20 while EMA20 was already above EMA50 (yesterday and today). The unfiltered crossover stays available
 as `baseline_buy_signal`.
 
 **Optional NSE delivery data.** `python scripts/download_deliverables.py` (default: last 45 days, only days not
@@ -331,14 +332,20 @@ with no bar on the scan date keeps a note and no footprint values, so a stale sp
 
 **Comparison.** With the same settings over the last 10 years of stored data (to 16 Oct 2026):
 
-| | Baseline SMA 20/50 | Smart-Money filtered |
+| | Baseline EMA 20/50 | Smart-Money filtered |
 |---|---|---|
-| CAGR | 14.2% | 19.2% |
-| Max drawdown | −32.1% | −29.4% |
-| Profit factor | 1.73 | 2.00 |
-| Win rate | 40.0% | 46.2% |
-| Expectancy (net P&L per trade) | ₹624 | ₹995 |
-| Completed trades | 433 | 461 |
+| CAGR | 17.9% | 22.4% |
+| Max drawdown | −21.4% | −26.6% |
+| Profit factor | 2.12 | 2.15 |
+| Win rate | 35.9% | 41.8% |
+| Expectancy (net P&L per trade) | ₹1,190 | ₹1,892 |
+| Completed trades | 351 | 323 |
+
+**Why EMA.** The crossover used simple moving averages (SMA) until October 2026. An exponential moving average
+(`ewm(span=N, adjust=False)`, alpha = 2 / (N + 1), seeded with the first close and hidden until N rows exist)
+weights recent closes more, so it turns sooner and exits falling stocks earlier. On the same data the SMA
+versions returned 14.2% (baseline, −32.1% max drawdown) and 19.2% (Smart Money, −29.4%). Choosing EMA after
+seeing these numbers is itself fitting to the past, which is one more reason to test on unseen data.
 
 The rules and thresholds were fixed in advance, not tuned, but this is still one in-sample run on a
 survivorship-biased universe: treat it as a reason to research further, not as evidence of an edge.
@@ -355,7 +362,7 @@ streamlit run app/streamlit_app.py         # opens http://localhost:8501
 
 The app has two pages, listed in the sidebar:
 
-- **Opportunity Scanner** (default): which NIFTY 100 stocks have a 20/50 SMA crossover signal
+- **Opportunity Scanner** (default): which NIFTY 100 stocks have a 20/50 EMA crossover signal
   on the latest trading day.
 - **Backtest**: the historical simulation of the same strategy (see below).
 
@@ -368,16 +375,16 @@ signals.
 
 | Signal | Meaning on the latest trading day ("Data as of") |
 |---|---|
-| **BUY** | SMA20 crossed **above** SMA50 that day |
-| **SELL** | SMA20 crossed **below** SMA50 that day |
-| **HOLD** | no new crossover that day. A stock whose SMA20 has been above SMA50 since an earlier crossover is HOLD, **not** BUY |
-| **Insufficient historical data** | fewer than 50 bars, so SMA50 and any signal are undefined |
+| **BUY** | EMA20 crossed **above** EMA50 that day |
+| **SELL** | EMA20 crossed **below** EMA50 that day |
+| **HOLD** | no new crossover that day. A stock whose EMA20 has been above EMA50 since an earlier crossover is HOLD, **not** BUY |
+| **Insufficient historical data** | fewer than 50 bars, so EMA50 and any signal are undefined |
 
 The page shows:
 - **Header:** "Data as of" date, universe and strategy.
 - **Signal sections:** Current BUY Signals, Current SELL Signals, recent crossovers from the
   last 10 trading days (for context), and the full 100-stock table (sortable).
-- **Stock Details:** price, SMA20, SMA50, today's signal, the last crossover, and a 6-month
+- **Stock Details:** price, EMA20, EMA50, today's signal, the last crossover, and a 6-month
   chart with the strategy's crossover markers.
 
 **Timing.** Data is end-of-day, not real-time. A signal dated D uses D's closing price, so it is
@@ -406,7 +413,7 @@ calculates signals, trades or metrics itself. Open it from the sidebar of
 `streamlit run app/streamlit_app.py`.
 
 1. In the sidebar, set initial capital, transaction cost, maximum position weight and a date
-   range. The strategy is fixed to *20 / 50 SMA Crossover* for now.
+   range. The strategy is fixed to *20 / 50 EMA Crossover* for now.
 2. Click **Run Backtest**. Data is loaded from `data/processed/` once and cached. Nothing is
    downloaded. A full 10-year, 100-stock run takes about 2 seconds after the first load
    (about 13 seconds).
@@ -419,11 +426,11 @@ The dashboard shows:
 | Portfolio Equity Over Time | daily total equity vs initial capital (hover for ₹ value) |
 | Drawdown | % below the previous equity peak, every day |
 | Trade Analysis | winning vs losing trades, distribution of trade returns, sortable table of all completed trades |
-| Stock Analysis | pick a stock: close + SMA20 + SMA50, BUY/SELL markers (filled = executed next open, hollow = not traded, hover for the reason), its trades, realized P&L, win rate |
+| Stock Analysis | pick a stock: close + EMA20 + EMA50, BUY/SELL markers (filled = executed next open, hollow = not traded, hover for the reason), its trades, realized P&L, win rate |
 | Portfolio Summary | final cash / invested / total, open positions with current price and unrealized P&L |
 | Download Results | trades CSV and equity-curve CSV, generated in memory |
 
-**Date range.** The SMAs are warmed up on the history *before* the start date, so signals
+**Date range.** The EMAs are warmed up on the history *before* the start date, so signals
 inside the range match a full-history run. The portfolio always starts in cash on the start
 date. Data after the end date is never seen by the strategy.
 
@@ -447,7 +454,7 @@ Next.js (client/, :3000)  ->  FastAPI (server/api/, :8000)  ->  server/src/ (uni
 ```
 
 The frontend only calls the API. It never reads Parquet files or contacts Yahoo/NSE, and it contains no
-strategy logic: every signal, SMA and metric comes from the Python modules.
+strategy logic: every signal, EMA and metric comes from the Python modules.
 
 ### Start both services
 
@@ -491,7 +498,7 @@ data changes, so later requests are fast.
 | GET | `/health` | API and data status. Never scans or downloads |
 | GET | `/api/meta` | strategy, data source, offline mode, backtest defaults |
 | GET | `/api/scanner` | latest-day BUY/SELL/HOLD for every constituent, with counts and failed symbols |
-| GET | `/api/scanner/{symbol}/history?start=&end=` | daily bars with SMA20, SMA50 and the strategy's historical crossovers |
+| GET | `/api/scanner/{symbol}/history?start=&end=` | daily bars with EMA20, EMA50 and the strategy's historical crossovers |
 | GET | `/api/signals/recent?days=30` | past crossovers and per-day BUY/SELL counts (context only) |
 | GET | `/api/smart-money` | latest-day footprint for every constituent, ranked by `vol_spike_ratio`, with NSE delivery columns when stored |
 | GET | `/api/backtest?initial_capital=&transaction_cost=&max_position_weight=&min_position_weight=&strategy=&years=` (or `start=&end=`) | runs `run_backtest`; `years` looks back from the latest stored date: metrics (incl. profit factor, expectancy), equity curve, trades, open positions. `strategy=smart_money` also returns `comparison` with the baseline |
@@ -511,13 +518,13 @@ returns are fractions (0.05 = +5%), as in the backtester.
   history across today's constituents; no scan snapshots are stored), recent crossovers.
 - **Stock Scanner:** summary cards, All/BUY/SELL/HOLD tabs, sortable and searchable table. On wide screens,
   clicking a row opens a preview panel; the chart icon opens the full analysis.
-- **Stock Analysis:** stock picker, plus a detail page with an interactive close/SMA20/SMA50 chart
+- **Stock Analysis:** stock picker, plus a detail page with an interactive close/EMA20/EMA50 chart
   (1M/3M/6M/1Y/ALL, volume pane, BUY/SELL markers from the strategy), crossovers per year and full signal history.
 - **Smart Money:** footprint counts, All / Pocket pivots / Accumulation / Active-in-10-days tabs, and a sortable table
-  ranked by volume spike: close, 1D %, volume spike, CLV, pocket pivot, accumulation, 10-day memory, SMA 20/50
+  ranked by volume spike: close, 1D %, volume spike, CLV, pocket pivot, accumulation, 10-day memory, EMA 20/50
   trend, and delivery spike / delivered % when NSE delivery data is stored.
 - **Backtesting:** runs the existing backtester over the last 1, 2, 3, 5 or 10 years: metrics, equity curve, drawdown, trades,
-  open positions. *Require 10-Day Smart Money Confirmation for SMA 20/50 Entry* runs the filtered strategy and adds a
+  open positions. *Require 10-Day Smart Money Confirmation for EMA 20/50 Entry* runs the filtered strategy and adds a
   side-by-side comparison (CAGR, max drawdown, profit factor, win rate, expectancy, trade count) with the baseline.
 - **Settings:** read-only view of the configuration that exists (API URL, data source, strategy rules,
   backtest defaults).
@@ -596,10 +603,10 @@ server/
     cleaner.py      clean(), load_clean(): tidy frames for downstream use, gaps reported
     target.py       add_medium_term_target(): future_max_return_60d + binary target (label only, never a feature)
   src/strategy/
-    baseline.py     generate_baseline_signals(): SMA20/SMA50 crossover BUY/SELL signals (signal on day t,
+    baseline.py     generate_baseline_signals(): EMA20/EMA50 crossover BUY/SELL signals (signal on day t,
                     executed at the stock's next trading day's open by the backtester)
     smart_money.py  add_smart_money_footprint(), generate_smart_money_signals(): volume spike, CLV,
-                    pocket pivots, accumulation, 10-day memory, smart-money filtered SMA 20/50
+                    pocket pivots, accumulation, 10-day memory, smart-money filtered EMA 20/50
   src/backtest/
     models.py       BacktestConfig, Position, Execution, Trade, BacktestResult
     engine.py       run_backtest(strategy=...) / run_backtest_on_signals() (any signals); ROC20 BUY ranking,

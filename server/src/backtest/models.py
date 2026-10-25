@@ -100,7 +100,7 @@ class BacktestResult:
     - open_positions: positions still held on the last day (marked to market
                       in the equity curve, not counted as completed trades)
     - strategy_frame: the exact per-stock data the backtest traded on (prices
-                      plus the strategy's own columns, e.g. sma20/sma50 and
+                      plus the strategy's own columns, e.g. ema20/ema50 and
                       buy/sell signals), so reports never recompute it
     """
 

@@ -42,17 +42,17 @@ DISPLAY_COLUMNS = {
     "name": "Company",
     "date": "Date",
     "close": "Close",
-    "sma20": "SMA 20",
-    "sma50": "SMA 50",
-    "sma_difference": "SMA20 − SMA50",
+    "ema20": "EMA 20",
+    "ema50": "EMA 50",
+    "ema_difference": "EMA20 − EMA50",
     "signal": "Signal",
     "signal_date": "Signal Date",
     "last_crossover": "Last Crossover",
     "last_crossover_date": "Last Crossover Date",
     "note": "Note",
 }
-SIGNAL_TABLE_FIELDS = ["symbol", "name", "close", "sma20", "sma50", "signal", "signal_date"]
-ALL_STOCKS_FIELDS = ["symbol", "name", "date", "close", "sma20", "sma50", "sma_difference",
+SIGNAL_TABLE_FIELDS = ["symbol", "name", "close", "ema20", "ema50", "signal", "signal_date"]
+ALL_STOCKS_FIELDS = ["symbol", "name", "date", "close", "ema20", "ema50", "ema_difference",
                      "signal", "signal_date", "last_crossover", "last_crossover_date", "note"]
 
 
@@ -137,15 +137,15 @@ def stock_options(result: ScanResult) -> list[str]:
 
 
 def stock_chart(result: ScanResult, symbol: str, months: int = CHART_MONTHS) -> go.Figure:
-    """Close, SMA20, SMA50 for the last `months` months, with the strategy's crossovers."""
+    """Close, EMA20, EMA50 for the last `months` months, with the strategy's crossovers."""
     sf = result.strategy_frame
     s = sf[sf["symbol"] == symbol].sort_values("date")
     s = s[s["date"] > s["date"].max() - pd.DateOffset(months=months)]
 
     fig = go.Figure()
     for col, name, color, width in (("close", "Close", dash.PRICE_COLOR, 1.8),
-                                    ("sma20", "SMA20", dash.SMA20_COLOR, 1.4),
-                                    ("sma50", "SMA50", dash.SMA50_COLOR, 1.4)):
+                                    ("ema20", "EMA20", dash.EMA20_COLOR, 1.4),
+                                    ("ema50", "EMA50", dash.EMA50_COLOR, 1.4)):
         fig.add_trace(go.Scatter(x=s["date"], y=s[col], mode="lines", name=name,
                                  line=dict(color=color, width=width),
                                  hovertemplate="₹%{y:,.2f}<extra>" + name + "</extra>"))

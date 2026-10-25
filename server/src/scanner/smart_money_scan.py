@@ -1,6 +1,6 @@
 """Smart Money scanner: each stock's institutional footprint on the latest trading day.
 
-    strategy frame (cleaned bars + SMA20/SMA50) -> add_smart_money_footprint -> latest row per stock
+    strategy frame (cleaned bars + EMA20/EMA50) -> add_smart_money_footprint -> latest row per stock
     + optional NSE deliverables (add_delivery_signals), matched on the same date
 
 Ranked by vol_spike_ratio, highest first (missing last, then by symbol). All
@@ -16,14 +16,14 @@ import pandas as pd
 from src.data.deliverables import add_delivery_signals
 from src.strategy.smart_money import add_smart_money_footprint
 
-UPTREND = "UPTREND"  # SMA20 above SMA50
-DOWNTREND = "DOWNTREND"  # SMA20 at or below SMA50
+UPTREND = "UPTREND"  # EMA20 above EMA50
+DOWNTREND = "DOWNTREND"  # EMA20 at or below EMA50
 NO_TREND = "INSUFFICIENT_DATA"  # fewer than 50 bars
 
 SMART_MONEY_COLUMNS = [
     "symbol", "name", "date", "close", "prev_close", "return_1d_pct", "volume",
     "vol_spike_ratio", "clv", "pocket_pivot", "institutional_accumulation", "smart_money_active_10d",
-    "sma20", "sma50", "trend",
+    "ema20", "ema50", "trend",
     "deliv_qty", "deliv_per", "deliv_spike_ratio", "delivery_spike",
     "note",
 ]
@@ -55,8 +55,8 @@ def scan_smart_money(
 
     latest = fp.groupby("symbol", sort=False).tail(1).reset_index(drop=True)
     latest["trend"] = NO_TREND
-    known = latest["sma20"].notna() & latest["sma50"].notna()
-    latest.loc[known, "trend"] = (latest.loc[known, "sma20"] > latest.loc[known, "sma50"]).map(
+    known = latest["ema20"].notna() & latest["ema50"].notna()
+    latest.loc[known, "trend"] = (latest.loc[known, "ema20"] > latest.loc[known, "ema50"]).map(
         {True: UPTREND, False: DOWNTREND})
 
     for col in ("deliv_qty", "deliv_per", "deliv_spike_ratio"):

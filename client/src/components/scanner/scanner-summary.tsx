@@ -17,14 +17,14 @@ export function ScannerSummary({ data, loading }: { data?: ScannerResponse; load
         label={<Term term="BUY">BUY signals</Term>}
         value={data?.buy_count ?? ""}
         tone={data && data.buy_count > 0 ? "gain" : "default"}
-        hint="Fresh SMA20 ↑ SMA50 crossovers"
+        hint="Fresh EMA20 ↑ EMA50 crossovers"
         loading={loading}
       />
       <MetricCard
         label={<Term term="SELL">SELL signals</Term>}
         value={data?.sell_count ?? ""}
         tone={data && data.sell_count > 0 ? "loss" : "default"}
-        hint="Fresh SMA20 ↓ SMA50 crossovers"
+        hint="Fresh EMA20 ↓ EMA50 crossovers"
         loading={loading}
       />
       <MetricCard

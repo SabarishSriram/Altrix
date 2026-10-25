@@ -12,7 +12,7 @@ import { displaySymbol, formatDate, formatPercent, formatPrice, trend, trendClas
 import { stockHref } from "@/lib/routes";
 import type { Signal, StockScan } from "@/lib/types";
 
-type SortKey = "symbol" | "close" | "daily_change_pct" | "sma20" | "sma50" | "signal" | "signal_date";
+type SortKey = "symbol" | "close" | "daily_change_pct" | "ema20" | "ema50" | "signal" | "signal_date";
 type Sort = { key: SortKey; dir: "asc" | "desc" };
 
 const SIGNAL_RANK: Record<Signal, number> = { BUY: 0, SELL: 1, HOLD: 2, INSUFFICIENT_DATA: 3 };
@@ -41,8 +41,8 @@ const COLUMNS: { key: SortKey; label: string; term?: TermKey; align?: "right"; c
   { key: "symbol", label: "Symbol" },
   { key: "close", label: "Close", align: "right" },
   { key: "daily_change_pct", label: "Change", term: "CHANGE", align: "right" },
-  { key: "sma20", label: "SMA20", term: "SMA20", align: "right", className: "hidden lg:table-cell" },
-  { key: "sma50", label: "SMA50", term: "SMA50", align: "right", className: "hidden lg:table-cell" },
+  { key: "ema20", label: "EMA20", term: "EMA20", align: "right", className: "hidden lg:table-cell" },
+  { key: "ema50", label: "EMA50", term: "EMA50", align: "right", className: "hidden lg:table-cell" },
   { key: "signal", label: "Signal" },
   { key: "signal_date", label: "Signal date", term: "SIGNAL_DATE", className: "hidden sm:table-cell" },
 ];
@@ -151,8 +151,8 @@ export function StocksTable({
                   </td>
                   <td className="num px-3 py-2 text-right font-medium">{formatPrice(s.close)}</td>
                   <td className={cn("num px-3 py-2 text-right", trendClass[t])}>{formatPercent(s.daily_change_pct)}</td>
-                  <td className="num hidden px-3 py-2 text-right text-muted-foreground lg:table-cell">{formatPrice(s.sma20)}</td>
-                  <td className="num hidden px-3 py-2 text-right text-muted-foreground lg:table-cell">{formatPrice(s.sma50)}</td>
+                  <td className="num hidden px-3 py-2 text-right text-muted-foreground lg:table-cell">{formatPrice(s.ema20)}</td>
+                  <td className="num hidden px-3 py-2 text-right text-muted-foreground lg:table-cell">{formatPrice(s.ema50)}</td>
                   <td className="px-3 py-2">
                     <SignalBadge signal={s.signal} />
                   </td>

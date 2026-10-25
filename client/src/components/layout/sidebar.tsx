@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
 
+import { LogoMark } from "@/components/brand/logo-mark";
 import { DataStatus } from "@/components/layout/data-status";
 import { useScanner } from "@/components/providers/scanner-provider";
 import { NAV_ITEMS, navItemFor } from "@/lib/nav";
@@ -11,7 +12,7 @@ import { NAV_ITEMS, navItemFor } from "@/lib/nav";
 export function Wordmark({ className }: { className?: string }) {
   return (
     <Link href="/overview" className={cn("flex items-center gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50", className)}>
-      <span className="grid size-6 place-items-center rounded-[5px] bg-foreground text-[11px] font-bold text-background">A</span>
+      <LogoMark />
       <span className="text-[15px] font-semibold tracking-tight">Altrix</span>
     </Link>
   );

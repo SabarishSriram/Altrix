@@ -12,6 +12,7 @@ import { SignalBadge } from "@/components/stocks/signal-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useResource } from "@/hooks/use-resource";
+import { CHART } from "@/lib/chart-theme";
 import { api } from "@/lib/api";
 import { displaySymbol, formatDate, formatPrice } from "@/lib/format";
 import { stockHref } from "@/lib/routes";
@@ -40,16 +41,16 @@ function DailyCrossoverChart({ data }: { data: DailySignalCount[] }) {
     <div className="h-56 w-full px-2 pt-3 pb-1">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: -28 }} stackOffset="sign">
-          <CartesianGrid vertical={false} stroke="#f0f0f0" />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#737373" }} interval="preserveStartEnd" minTickGap={16} />
-          <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#737373" }} tickFormatter={(v: number) => String(Math.abs(v))} />
+          <CartesianGrid vertical={false} stroke={CHART.grid} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={CHART.axisTick} interval="preserveStartEnd" minTickGap={16} />
+          <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={CHART.axisTick} tickFormatter={(v: number) => String(Math.abs(v))} />
           <Tooltip
-            cursor={{ fill: "#f5f5f5" }}
-            contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #e5e5e5", boxShadow: "none" }}
+            cursor={{ fill: CHART.cursor }}
+            contentStyle={CHART.tooltip}
             formatter={(value, name) => [Math.abs(Number(value)), name]}
           />
-          <Bar dataKey="buy" name="BUY" stackId="s" fill="#16803c" maxBarSize={12} />
-          <Bar dataKey="sellNeg" name="SELL" stackId="s" fill="#c8372d" maxBarSize={12} />
+          <Bar dataKey="buy" name="BUY" stackId="s" fill={CHART.gain} maxBarSize={12} />
+          <Bar dataKey="sellNeg" name="SELL" stackId="s" fill={CHART.loss} maxBarSize={12} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -88,7 +89,7 @@ export function OverviewView() {
           ) : current.length === 0 ? (
             <EmptyState
               title="No new BUY or SELL signals"
-              description={`No stock's SMA20 crossed its SMA50 on ${formatDate(asOf)}. All ${scanner.data?.scanned_count ?? ""} stocks are HOLD.`}
+              description={`No stock's EMA20 crossed its EMA50 on ${formatDate(asOf)}. All ${scanner.data?.scanned_count ?? ""} stocks are HOLD.`}
             />
           ) : (
             <ul className="divide-y">

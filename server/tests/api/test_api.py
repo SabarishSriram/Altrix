@@ -79,7 +79,7 @@ def test_scanner_structure_and_counts(client):
         {"symbol": "MISSING.NS", "reason": "no stored data (run: python scripts/download_data.py)"}]
     assert {"name", "buy_rule", "sell_rule"} <= set(body["strategy"])
     for stock in body["stocks"]:
-        assert {"symbol", "date", "close", "previous_close", "daily_change_pct", "sma20", "sma50",
+        assert {"symbol", "date", "close", "previous_close", "daily_change_pct", "ema20", "ema50",
                 "signal", "signal_date"} <= set(stock)
 
 
@@ -88,9 +88,9 @@ def test_signal_mapping_uses_strategy_crossovers(client):
     buy, sell = stocks["BUYCO.NS"], stocks["SELLCO.NS"]
     assert buy["signal"] == "BUY" and buy["signal_date"] == "2026-08-24"
     assert sell["signal"] == "SELL" and sell["signal_date"] == "2026-08-24"
-    # SMA20 above SMA50 from an *earlier* crossover is HOLD, not BUY
+    # EMA20 above EMA50 from an *earlier* crossover is HOLD, not BUY
     up = stocks["UPCO.NS"]
-    assert up["sma20"] > up["sma50"]
+    assert up["ema20"] > up["ema50"]
     assert up["signal"] == "HOLD" and up["signal_date"] is None
     assert up["last_crossover"] == "BUY" and up["last_crossover_date"] < "2026-08-24"
     assert stocks["FLATCO.NS"]["signal"] == "HOLD"
@@ -106,8 +106,8 @@ def test_daily_change_from_previous_stored_bar(client):
 def test_insufficient_history(client):
     new = by_symbol(client.get("/api/scanner").json())["NEWCO.NS"]
     assert new["signal"] == "INSUFFICIENT_DATA"
-    assert new["sma50"] is None and new["sma_difference"] is None  # NaN serialised as null
-    assert new["sma20"] == pytest.approx(100.0)
+    assert new["ema50"] is None and new["ema_difference"] is None  # NaN serialised as null
+    assert new["ema20"] == pytest.approx(100.0)
     assert "Insufficient" in new["note"]
 
 
@@ -154,7 +154,7 @@ def test_history_points_and_crossovers(client):
     body = r.json()
     assert body["symbol"] == "BUYCO.NS" and body["name"] == "Buy Co"
     assert body["total_bars"] == len(body["points"]) == 61
-    assert body["points"][0]["sma50"] is None  # warm-up
+    assert body["points"][0]["ema50"] is None  # warm-up
     assert body["points"][-1]["signal"] == "BUY"
     assert [c["date"] for c in body["crossovers"]] == ["2026-08-24"]
     assert body["stock"]["signal"] == "BUY"
@@ -193,7 +193,7 @@ def test_history_insufficient_data_has_no_signals(client):
     body = client.get("/api/scanner/NEWCO.NS/history").json()
     assert body["total_bars"] == 20
     assert body["crossovers"] == []
-    assert all(p["sma50"] is None for p in body["points"])
+    assert all(p["ema50"] is None for p in body["points"])
 
 
 # ---- /api/signals/recent -----------------------------------------------------------------

@@ -8,12 +8,12 @@ module just reads the strategy's output on the latest trading day.
 Classification of each stock on the scan date (`as_of`, the latest trading day
 in the data):
 
-    BUY                SMA20 crossed above SMA50 on `as_of`  (strategy buy_signal)
-    SELL               SMA20 crossed below SMA50 on `as_of`  (strategy sell_signal)
+    BUY                EMA20 crossed above EMA50 on `as_of`  (strategy buy_signal)
+    SELL               EMA20 crossed below EMA50 on `as_of`  (strategy sell_signal)
     HOLD               no new crossover on `as_of`. This includes stocks whose
-                       SMA20 is above SMA50 from an *earlier* crossover; that
+                       EMA20 is above EMA50 from an *earlier* crossover; that
                        is not a new BUY.
-    INSUFFICIENT_DATA  fewer than 50 bars, so SMA50 (and any signal) is undefined
+    INSUFFICIENT_DATA  fewer than 50 bars, so EMA50 (and any signal) is undefined
 
 A signal on `as_of` is computed from that day's close, so it is only known
 after the close. A backtest would execute it at the next trading day's open.
@@ -41,16 +41,16 @@ SCAN_COLUMNS = [
     "name",
     "date",  # the stock's latest bar
     "close",
-    "sma20",
-    "sma50",
-    "sma_difference",  # sma20 - sma50
+    "ema20",
+    "ema50",
+    "ema_difference",  # ema20 - ema50
     "signal",  # BUY / SELL / HOLD / INSUFFICIENT_DATA on the scan date
     "signal_date",  # = date for BUY/SELL, empty otherwise
     "last_crossover",  # most recent BUY or SELL signal in the stock's history
     "last_crossover_date",
     "note",
 ]
-_STRATEGY_COLUMNS = ("date", "symbol", "close", "sma20", "sma50", "buy_signal", "sell_signal")
+_STRATEGY_COLUMNS = ("date", "symbol", "close", "ema20", "ema50", "buy_signal", "sell_signal")
 
 
 def scan_signals(strategy_frame: pd.DataFrame, as_of: pd.Timestamp | None = None) -> pd.DataFrame:
@@ -83,9 +83,9 @@ def scan_signals(strategy_frame: pd.DataFrame, as_of: pd.Timestamp | None = None
         last_cross = crossings.iloc[-1] if not crossings.empty else None
 
         note = ""
-        if pd.isna(last["sma50"]):
+        if pd.isna(last["ema50"]):
             signal = INSUFFICIENT_DATA
-            note = f"Insufficient historical data ({len(g)} bars; SMA50 needs {LONG_WINDOW})"
+            note = f"Insufficient historical data ({len(g)} bars; EMA50 needs {LONG_WINDOW})"
         elif last["date"] < as_of:
             signal = HOLD  # no bar on the scan date -> no crossover on the scan date
             note = f"No data for {as_of.date()}; latest bar is {last['date'].date()}"
@@ -101,9 +101,9 @@ def scan_signals(strategy_frame: pd.DataFrame, as_of: pd.Timestamp | None = None
             "name": "",
             "date": last["date"],
             "close": last["close"],
-            "sma20": last["sma20"],
-            "sma50": last["sma50"],
-            "sma_difference": last["sma20"] - last["sma50"],
+            "ema20": last["ema20"],
+            "ema50": last["ema50"],
+            "ema_difference": last["ema20"] - last["ema50"],
             "signal": signal,
             "signal_date": last["date"] if signal in (BUY, SELL) else pd.NaT,
             "last_crossover": None if last_cross is None else (BUY if last_cross["buy_signal"] else SELL),
@@ -133,12 +133,12 @@ def recent_crossovers(strategy_frame: pd.DataFrame, trading_days: int = 10) -> p
     latest date are "current".
     """
     if strategy_frame.empty:
-        return pd.DataFrame(columns=["date", "symbol", "signal", "close", "sma20", "sma50"])
+        return pd.DataFrame(columns=["date", "symbol", "signal", "close", "ema20", "ema50"])
     dates = strategy_frame["date"].drop_duplicates().nlargest(trading_days)
     df = strategy_frame[strategy_frame["date"].isin(dates)
                         & (strategy_frame["buy_signal"] | strategy_frame["sell_signal"])]
     out = df.assign(signal=df["buy_signal"].map({True: BUY, False: SELL}))
-    return (out[["date", "symbol", "signal", "close", "sma20", "sma50"]]
+    return (out[["date", "symbol", "signal", "close", "ema20", "ema50"]]
             .sort_values(["date", "signal", "symbol"], ascending=[False, True, True])
             .reset_index(drop=True))
 

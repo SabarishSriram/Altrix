@@ -20,13 +20,13 @@ from src.data import ParquetStore, load_clean
 from src.strategy import generate_baseline_signals, generate_smart_money_signals
 
 ROOT = Path(__file__).resolve().parents[1]
-STRATEGY_NAME = "20 / 50 SMA Crossover"
+STRATEGY_NAME = "20 / 50 EMA Crossover"
 BASELINE = "baseline"
 SMART_MONEY = "smart_money"
 # key -> (display name, signal generator); the generators live in src/strategy.
 STRATEGIES = {
     BASELINE: (STRATEGY_NAME, generate_baseline_signals),
-    SMART_MONEY: ("20 / 50 SMA + 10-Day Smart Money Confirmation", generate_smart_money_signals),
+    SMART_MONEY: ("20 / 50 EMA + 10-Day Smart Money Confirmation", generate_smart_money_signals),
 }
 
 # Muted palette: one accent per meaning, nothing decorative.
@@ -36,8 +36,8 @@ WIN_COLOR = "#16a34a"
 LOSS_COLOR = "#dc2626"
 NEUTRAL_COLOR = "#64748b"
 PRICE_COLOR = "#334155"
-SMA20_COLOR = "#2563eb"
-SMA50_COLOR = "#f59e0b"
+EMA20_COLOR = "#2563eb"
+EMA50_COLOR = "#f59e0b"
 
 
 class DataNotFoundError(Exception):
@@ -329,7 +329,7 @@ def default_symbol(symbols: list[str]) -> str | None:
 @dataclass
 class StockView:
     symbol: str
-    prices: pd.DataFrame  # date, close, sma20, sma50, ... from the strategy frame
+    prices: pd.DataFrame  # date, close, ema20, ema50, ... from the strategy frame
     signals: pd.DataFrame  # this stock's signals with status, plus close on signal day
     trades: pd.DataFrame  # display trades table for this stock
     realized_pnl: float
@@ -360,9 +360,9 @@ def stock_figure(view: StockView) -> go.Figure:
     p = view.prices
     fig = go.Figure()
     for col, name, color, width in (("close", "Close", PRICE_COLOR, 1.5),
-                                    ("sma20", "SMA20", SMA20_COLOR, 1.2),
-                                    ("sma50", "SMA50", SMA50_COLOR, 1.2)):
-        if col not in p.columns:  # a strategy without SMAs still gets a price chart
+                                    ("ema20", "EMA20", EMA20_COLOR, 1.2),
+                                    ("ema50", "EMA50", EMA50_COLOR, 1.2)):
+        if col not in p.columns:  # a strategy without EMAs still gets a price chart
             continue
         fig.add_trace(go.Scatter(
             x=p["date"], y=p[col], mode="lines", name=name, line=dict(color=color, width=width),

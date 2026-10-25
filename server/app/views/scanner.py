@@ -29,10 +29,10 @@ from src.scanner import BUY, HOLD, INSUFFICIENT_DATA, SELL, ScanResult, recent_c
 logger = logging.getLogger("altrix.scanner")
 
 PRICE = st.column_config.NumberColumn(format="₹ %,.2f")
-DIFF = st.column_config.NumberColumn(format="₹ %,.2f", help="SMA20 minus SMA50")
+DIFF = st.column_config.NumberColumn(format="₹ %,.2f", help="EMA20 minus EMA50")
 DATE = st.column_config.DateColumn(format="DD MMM YYYY")
 COLUMN_CONFIG = {
-    "Close": PRICE, "SMA 20": PRICE, "SMA 50": PRICE, "SMA20 − SMA50": DIFF,
+    "Close": PRICE, "EMA 20": PRICE, "EMA 50": PRICE, "EMA20 − EMA50": DIFF,
     "Date": DATE, "Signal Date": DATE, "Last Crossover Date": DATE,
 }
 
@@ -124,7 +124,7 @@ if result.as_of is None:
 metric_row([
     ("Data as of", ui.format_date(result.as_of), "Latest completed trading day in the stored data."),
     ("Universe", ui.UNIVERSE_NAME, f"{len(result.table)} of {result.universe_size} constituents scanned."),
-    ("Strategy", dash.STRATEGY_NAME, "SMA20 crossing SMA50, from src/strategy/baseline.py."),
+    ("Strategy", dash.STRATEGY_NAME, "EMA20 crossing EMA50, from src/strategy/baseline.py."),
 ], widths=[1, 1, 1.5])  # wider strategy card so the name is not truncated
 st.caption(
     f"End-of-day prices (Yahoo Finance, stored locally); not real-time. Signals dated "
@@ -142,14 +142,14 @@ counts = result.counts()
 metric_row([
     ("BUY signals", str(counts[BUY]), None),
     ("SELL signals", str(counts[SELL]), None),
-    ("No new signal (HOLD)", str(counts[HOLD]), "No SMA20/SMA50 crossover on the latest day."),
+    ("No new signal (HOLD)", str(counts[HOLD]), "No EMA20/EMA50 crossover on the latest day."),
     ("Insufficient history", str(counts[INSUFFICIENT_DATA]), "Fewer than 50 trading days of data."),
 ])
 
 # ---- Current signals -------------------------------------------------------------------------
 as_of_txt = ui.format_date(result.as_of)
 st.subheader("Current BUY Signals")
-st.caption(f"Stocks meeting the baseline strategy's BUY condition: SMA20 crossed above SMA50 on {as_of_txt}.")
+st.caption(f"Stocks meeting the baseline strategy's BUY condition: EMA20 crossed above EMA50 on {as_of_txt}.")
 buys = result.with_signal(BUY)
 if buys.empty:
     st.info("No new BUY signals detected in the current NIFTY 100 universe.")
@@ -157,7 +157,7 @@ else:
     signal_table(buys, ui.SIGNAL_TABLE_FIELDS)
 
 st.subheader("Current SELL Signals")
-st.caption(f"Stocks where SMA20 crossed below SMA50 on {as_of_txt}: the strategy's exit condition for existing positions.")
+st.caption(f"Stocks where EMA20 crossed below EMA50 on {as_of_txt}: the strategy's exit condition for existing positions.")
 sells = result.with_signal(SELL)
 if sells.empty:
     st.info("No new SELL signals detected in the current NIFTY 100 universe.")
@@ -171,12 +171,12 @@ with st.expander("Recent crossovers (last 10 trading days)"):
         st.write("No crossovers in the last 10 trading days.")
     else:
         st.dataframe(recent.rename(columns={"date": "Signal Date", "symbol": "Symbol", "signal": "Signal",
-                                            "close": "Close", "sma20": "SMA 20", "sma50": "SMA 50"}),
+                                            "close": "Close", "ema20": "EMA 20", "ema50": "EMA 50"}),
                      column_config=COLUMN_CONFIG, hide_index=True)
 
 with st.expander(f"All {ui.UNIVERSE_NAME} Stocks ({len(result.table)})"):
-    st.caption("HOLD means no new crossover on the latest day; SMA20 may be above or below SMA50 "
-               "(see SMA20 − SMA50 and Last Crossover). Click a column header to sort.")
+    st.caption("HOLD means no new crossover on the latest day; EMA20 may be above or below EMA50 "
+               "(see EMA20 − EMA50 and Last Crossover). Click a column header to sort.")
     signal_table(result.table, ui.ALL_STOCKS_FIELDS)
 
 # ---- Stock details ---------------------------------------------------------------------------
@@ -187,8 +187,8 @@ symbol = st.selectbox("Select Stock", options, format_func=lambda s: f"{s} · {n
 d = ui.stock_details(result, symbol)
 metric_row([
     ("Current Price", dash.format_inr(d["close"], 2), f"Close on {ui.format_date(d['date'])}."),
-    ("SMA20", dash.format_inr(d["sma20"], 2), None),
-    ("SMA50", dash.format_inr(d["sma50"], 2), None),
+    ("EMA20", dash.format_inr(d["ema20"], 2), None),
+    ("EMA50", dash.format_inr(d["ema50"], 2), None),
     ("Current Signal", ui.SIGNAL_LABELS.get(d["signal"], d["signal"]), "Signal on the latest trading day."),
     ("Signal Date", ui.format_date(d["signal_date"]), "Only set when there is a BUY/SELL on the latest day."),
 ])

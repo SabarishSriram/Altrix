@@ -25,14 +25,14 @@ export function StockStats({ stock, className }: { stock: StockScan; className?:
       <Stat label="Signal" term={stock.signal === "INSUFFICIENT_DATA" ? "INSUFFICIENT_DATA" : stock.signal}>
         <SignalBadge signal={stock.signal} />
       </Stat>
-      <Stat label="SMA20" term="SMA20">{formatPrice(stock.sma20)}</Stat>
-      <Stat label="SMA50" term="SMA50">{formatPrice(stock.sma50)}</Stat>
+      <Stat label="EMA20" term="EMA20">{formatPrice(stock.ema20)}</Stat>
+      <Stat label="EMA50" term="EMA50">{formatPrice(stock.ema50)}</Stat>
       <Stat label="Signal date" term="SIGNAL_DATE">{formatDate(stock.signal_date)}</Stat>
     </dl>
   );
 }
 
-/** "SMA20 is above SMA50 since a BUY crossover on …" — context for HOLD stocks. */
+/** "EMA20 is above EMA50 since a BUY crossover on …" — context for HOLD stocks. */
 export function CrossoverContext({ stock }: { stock: StockScan }) {
   if (stock.signal === "INSUFFICIENT_DATA") return <p className="text-xs text-muted-foreground">{stock.note}</p>;
   return (

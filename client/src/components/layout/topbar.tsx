@@ -8,6 +8,7 @@ import { cn } from "cn";
 import { DataStatus } from "@/components/layout/data-status";
 import { NavLinks, SidebarFooter, Wordmark } from "@/components/layout/sidebar";
 import { StockSearch } from "@/components/layout/stock-search";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useScanner } from "@/components/providers/scanner-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,6 +117,7 @@ export function Topbar() {
             <Skeleton className="mt-0.5 h-4 w-20" />
           )}
         </div>
+        <ThemeToggle />
         <RefreshMenu />
       </div>
       <div className="flex h-8 items-center gap-3 border-t bg-surface px-4 text-[11px] text-muted-foreground sm:px-6">

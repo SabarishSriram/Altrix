@@ -34,29 +34,29 @@ def test_buy_when_crossover_is_on_latest_day():
     r = row(scan_current_opportunities(frame(FLAT + [110])), "TEST.NS")
     assert r["signal"] == BUY
     assert r["signal_date"] == r["date"] == pd.bdate_range("2024-01-01", periods=61)[-1]
-    assert r["sma20"] > r["sma50"] and r["sma_difference"] == pytest.approx(r["sma20"] - r["sma50"])
+    assert r["ema20"] > r["ema50"] and r["ema_difference"] == pytest.approx(r["ema20"] - r["ema50"])
     assert r["last_crossover"] == BUY and r["last_crossover_date"] == r["date"]
 
 
 def test_sell_when_downward_crossover_is_on_latest_day():
     r = row(scan_current_opportunities(frame(FLAT + [90])), "TEST.NS")
     assert r["signal"] == SELL and r["signal_date"] == r["date"]
-    assert r["sma20"] < r["sma50"]
+    assert r["ema20"] < r["ema50"]
 
 
-def test_sma20_above_sma50_without_new_crossover_is_hold_not_buy():
+def test_ema20_above_ema50_without_new_crossover_is_hold_not_buy():
     df = frame(FLAT + [110, 111, 112, 113])  # crossed up 4 days ago, still above
     r = row(scan_current_opportunities(df), "TEST.NS")
-    assert r["sma20"] > r["sma50"]
+    assert r["ema20"] > r["ema50"]
     assert r["signal"] == HOLD                 # NOT a new BUY
     assert pd.isna(r["signal_date"])
     assert r["last_crossover"] == BUY          # the earlier crossover is still reported
     assert r["last_crossover_date"] == df["date"].iloc[60]
 
 
-def test_sma20_below_sma50_without_new_crossover_is_hold():
+def test_ema20_below_ema50_without_new_crossover_is_hold():
     r = row(scan_current_opportunities(frame(FLAT + [90, 89, 88])), "TEST.NS")
-    assert r["sma20"] < r["sma50"] and r["signal"] == HOLD and r["last_crossover"] == SELL
+    assert r["ema20"] < r["ema50"] and r["signal"] == HOLD and r["last_crossover"] == SELL
 
 
 def test_never_crossed_has_no_last_crossover():
@@ -83,14 +83,14 @@ def test_stocks_are_scanned_independently():
 def test_fewer_than_50_bars_is_insufficient_and_never_a_signal():
     r = row(scan_current_opportunities(frame([100.0] * 30 + [150.0] * 19)), "TEST.NS")
     assert r["signal"] == INSUFFICIENT_DATA
-    assert pd.isna(r["sma50"]) and pd.isna(r["signal_date"])
+    assert pd.isna(r["ema50"]) and pd.isna(r["signal_date"])
     assert "Insufficient historical data" in r["note"]
 
 
 def test_exactly_50_bars_cannot_cross_yet():
-    # SMA50 exists on bar 50 but not on bar 49, so no crossover can be observed.
+    # EMA50 exists on bar 50 but not on bar 49, so no crossover can be observed.
     r = row(scan_current_opportunities(frame([100.0] * 49 + [130.0])), "TEST.NS")
-    assert r["sma20"] > r["sma50"] and r["signal"] == HOLD
+    assert r["ema20"] > r["ema50"] and r["signal"] == HOLD
 
 
 def test_insufficient_stock_does_not_affect_others():

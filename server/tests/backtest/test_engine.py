@@ -419,7 +419,7 @@ def _walk_market(days=400, seed=42, symbols=("A", "B", "C")) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def test_date_range_keeps_sma_warmup_from_earlier_history():
+def test_date_range_keeps_ema_warmup_from_earlier_history():
     df = _walk_market()
     dates = df["date"].sort_values().unique()
     start, end = dates[100], dates[300]
@@ -427,7 +427,7 @@ def test_date_range_keeps_sma_warmup_from_earlier_history():
 
     assert r.equity_curve["date"].iloc[0] == start and r.equity_curve["date"].iloc[-1] == end
     sf = r.strategy_frame
-    assert sf["sma50"].notna().all()  # warmed up on pre-start history
+    assert sf["ema50"].notna().all()  # warmed up on pre-start history
     full = generate_baseline_signals(df)
     in_range = full[(full.date >= start) & (full.date <= end)]
     assert r.signals["signal_date"].tolist() == sorted(

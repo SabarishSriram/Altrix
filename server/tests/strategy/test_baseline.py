@@ -21,30 +21,46 @@ def random_walk(n: int, seed: int) -> list[float]:
     return list(100 * np.exp(np.cumsum(rng.normal(0, 0.02, n))))
 
 
-# Flat for 60 days (SMA20 == SMA50), then a sharp rise, a plateau, and a sharp fall.
+def manual_ema(closes: list[float], span: int) -> list[float]:
+    """Reference EMA: alpha = 2 / (span + 1), seeded with the first close, hidden for span - 1 rows."""
+    alpha = 2 / (span + 1)
+    out, e = [], None
+    for c in closes:
+        e = c if e is None else alpha * c + (1 - alpha) * e
+        out.append(e)
+    return [np.nan] * (span - 1) + out[span - 1:]
+
+
+# Flat for 60 days (EMA20 == EMA50), then a sharp rise, a plateau, and a sharp fall.
 FLAT, UP, PLATEAU, DOWN = [100] * 60, [110 + i for i in range(20)], [130] * 40, [60] * 40
 CROSS_CLOSES = FLAT + UP + PLATEAU + DOWN
-BUY_DAY = 60  # first rise: SMA20 jumps above SMA50 (they were equal the day before)
+BUY_DAY = 60  # first rise: EMA20 jumps above EMA50 (they were equal the day before)
 
 
-# 1. SMA calculation -------------------------------------------------------
+# 1. EMA calculation -------------------------------------------------------
 
-def test_sma_values_match_manual_means():
+def test_ema_values_match_the_recursive_formula():
     closes = random_walk(120, seed=1)
     out = generate_baseline_signals(frame(closes))
+    e20, e50 = manual_ema(closes, 20), manual_ema(closes, 50)
     for t in (19, 49, 77, 119):
-        if t >= 19:
-            assert out.loc[t, "sma20"] == pytest.approx(np.mean(closes[t - 19 : t + 1]))
+        assert out.loc[t, "ema20"] == pytest.approx(e20[t])
         if t >= 49:
-            assert out.loc[t, "sma50"] == pytest.approx(np.mean(closes[t - 49 : t + 1]))
+            assert out.loc[t, "ema50"] == pytest.approx(e50[t])
+
+
+def test_ema_weights_recent_closes_more_than_a_simple_average():
+    closes = [100.0] * 60 + [120.0] * 5  # a jump: the EMA follows faster than the 20-day mean
+    out = generate_baseline_signals(frame(closes))
+    assert out.loc[64, "ema20"] > np.mean(closes[45:65])
 
 
 # 2-4. Crossovers ----------------------------------------------------------
 
 def test_buy_on_crossover_day_only():
     out = generate_baseline_signals(frame(CROSS_CLOSES))
-    assert out.loc[BUY_DAY - 1, "sma20"] == out.loc[BUY_DAY - 1, "sma50"]  # equal the day before
-    assert out.loc[BUY_DAY, "sma20"] > out.loc[BUY_DAY, "sma50"]
+    assert out.loc[BUY_DAY - 1, "ema20"] == out.loc[BUY_DAY - 1, "ema50"]  # equal the day before
+    assert out.loc[BUY_DAY, "ema20"] > out.loc[BUY_DAY, "ema50"]
     assert signal_rows(out, "buy_signal") == [BUY_DAY]
 
 
@@ -54,15 +70,15 @@ def test_sell_on_crossover_day_only():
     assert len(sells) == 1
     t = sells[0]
     assert t >= len(FLAT + UP + PLATEAU)  # happens during the fall
-    assert out.loc[t - 1, "sma20"] >= out.loc[t - 1, "sma50"]
-    assert out.loc[t, "sma20"] < out.loc[t, "sma50"]
+    assert out.loc[t - 1, "ema20"] >= out.loc[t - 1, "ema50"]
+    assert out.loc[t, "ema20"] < out.loc[t, "ema50"]
 
 
 def test_no_repeated_signals_while_trend_persists():
     out = generate_baseline_signals(frame(CROSS_CLOSES))
-    above = out["sma20"] > out["sma50"]
-    below = out["sma20"] < out["sma50"]
-    assert above.sum() > 30 and below.sum() > 10  # SMA20 stays on each side for many days
+    above = out["ema20"] > out["ema50"]
+    below = out["ema20"] < out["ema50"]
+    assert above.sum() > 30 and below.sum() > 10  # EMA20 stays on each side for many days
     assert out["buy_signal"].sum() == 1
     assert out["sell_signal"].sum() == 1
 
@@ -70,8 +86,7 @@ def test_no_repeated_signals_while_trend_persists():
 def test_matches_reference_loop_on_random_prices():
     closes = random_walk(600, seed=7)
     out = generate_baseline_signals(frame(closes))
-    s20 = [np.mean(closes[t - 19 : t + 1]) if t >= 19 else np.nan for t in range(len(closes))]
-    s50 = [np.mean(closes[t - 49 : t + 1]) if t >= 49 else np.nan for t in range(len(closes))]
+    s20, s50 = manual_ema(closes, 20), manual_ema(closes, 50)
     buys = [t for t in range(50, len(closes)) if s20[t - 1] <= s50[t - 1] and s20[t] > s50[t]]
     sells = [t for t in range(50, len(closes)) if s20[t - 1] >= s50[t - 1] and s20[t] < s50[t]]
 
@@ -85,23 +100,23 @@ def test_matches_reference_loop_on_random_prices():
 
 # 5. Insufficient history --------------------------------------------------
 
-def test_no_sma_or_signal_before_enough_history():
+def test_no_ema_or_signal_before_enough_history():
     out = generate_baseline_signals(frame(random_walk(80, seed=3)))
-    assert out["sma20"].iloc[:19].isna().all() and out["sma20"].iloc[19:].notna().all()
-    assert out["sma50"].iloc[:49].isna().all() and out["sma50"].iloc[49:].notna().all()
+    assert out["ema20"].iloc[:19].isna().all() and out["ema20"].iloc[19:].notna().all()
+    assert out["ema50"].iloc[:49].isna().all() and out["ema50"].iloc[49:].notna().all()
     assert not out[["buy_signal", "sell_signal"]].iloc[:50].any().any()
 
 
-def test_already_above_when_sma50_first_exists_is_not_a_buy():
-    # Steady rise: SMA20 > SMA50 from the first day SMA50 exists, but no crossover is ever seen.
+def test_already_above_when_ema50_first_exists_is_not_a_buy():
+    # Steady rise: EMA20 > EMA50 from the first day EMA50 exists, but no crossover is ever seen.
     out = generate_baseline_signals(frame([100 + i for i in range(80)]))
-    assert out.loc[49, "sma20"] > out.loc[49, "sma50"]
+    assert out.loc[49, "ema20"] > out.loc[49, "ema50"]
     assert not out["buy_signal"].any() and not out["sell_signal"].any()
 
 
 def test_short_history_gives_no_signals():
     out = generate_baseline_signals(frame([100.0] * 30))
-    assert out["sma50"].isna().all()
+    assert out["ema50"].isna().all()
     assert not out["buy_signal"].any() and not out["sell_signal"].any()
 
 
@@ -119,8 +134,8 @@ def test_symbols_are_independent():
     alone = generate_baseline_signals(a)
     pd.testing.assert_frame_equal(got_a, alone)          # B has no influence on A
     assert not got_b["buy_signal"].any() and not got_b["sell_signal"].any()
-    assert got_b["sma20"].dropna().eq(50.0).all()         # A's prices never leak into B
-    assert got_b["sma50"].iloc[:49].isna().all()          # each stock needs its own 50 rows
+    assert got_b["ema20"].dropna().eq(50.0).all()         # A's prices never leak into B
+    assert got_b["ema50"].iloc[:49].isna().all()          # each stock needs its own 50 rows
 
 
 # 7. Purity and lookahead ----------------------------------------------------
@@ -131,7 +146,7 @@ def test_input_not_mutated_and_columns_kept():
     out = generate_baseline_signals(df)
 
     pd.testing.assert_frame_equal(df, before)
-    assert list(out.columns) == list(df.columns) + ["sma20", "sma50", "buy_signal", "sell_signal"]
+    assert list(out.columns) == list(df.columns) + ["ema20", "ema50", "buy_signal", "sell_signal"]
     assert out["buy_signal"].dtype == bool and out["sell_signal"].dtype == bool
     pd.testing.assert_frame_equal(out[df.columns], df)
 

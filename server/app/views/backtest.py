@@ -97,7 +97,7 @@ with st.sidebar:
                         min_value=data_start.date(), max_value=data_end.date())
     run_clicked = st.button("Run Backtest", type="primary", width="stretch")
     st.caption(f"{data['symbol'].nunique()} stocks · data {data_start.date()} → {data_end.date()}. "
-               "Signals use the stock's history before the start date to warm up the SMAs.")
+               "Signals use the stock's history before the start date to warm up the EMAs.")
 
 settings = dash.BacktestSettings(
     initial_capital=float(capital),

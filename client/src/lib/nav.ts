@@ -9,7 +9,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/overview", label: "Overview", description: "Latest scan at a glance", icon: LayoutGrid },
-  { href: "/scanner", label: "Stock Scanner", description: "NIFTY 100 · 20/50 SMA crossover signals on the latest trading day", icon: ScanSearch },
+  { href: "/scanner", label: "Stock Scanner", description: "NIFTY 100 · 20/50 EMA crossover signals on the latest trading day", icon: ScanSearch },
   { href: "/smart-money", label: "Smart Money", description: "Institutional footprint: volume spikes, pocket pivots and accumulation on the latest day", icon: Footprints },
   { href: "/stocks", label: "Stock Analysis", description: "Price history, moving averages and crossover signals", icon: LineChart },
   { href: "/backtest", label: "Backtesting", description: "Historical simulation of the baseline strategy", icon: FlaskConical },

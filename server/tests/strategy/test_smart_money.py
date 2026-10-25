@@ -67,16 +67,16 @@ def test_down_day_older_than_10_rows_no_longer_counts():
     assert out.loc[60, "pocket_pivot"]
 
 
-def test_pocket_pivot_needs_close_near_or_above_sma50():
-    closes = [100.0] * 55 + [90.0, 90.5]  # up day at row 56, but 90.5 < 95% of SMA50 (~99.4)
+def test_pocket_pivot_needs_close_near_or_above_ema50():
+    closes = [100.0] * 55 + [90.0, 90.5]  # up day at row 56, but 90.5 < 95% of EMA50 (~99.4)
     out = add_smart_money_footprint(bars(closes))
-    assert out.loc[56, "close"] < 0.95 * out.loc[56, "sma50"]
+    assert out.loc[56, "close"] < 0.95 * out.loc[56, "ema50"]
     assert not out.loc[56, "pocket_pivot"]
 
 
 def test_no_pocket_pivot_before_50_rows():
     out = add_smart_money_footprint(bars(rising(60)))
-    assert not out.loc[:48, "pocket_pivot"].any()  # SMA50 undefined
+    assert not out.loc[:48, "pocket_pivot"].any()  # EMA50 undefined
     assert out.loc[49:, "pocket_pivot"].all()      # steady rise, no down days: every up day qualifies
 
 
@@ -101,7 +101,7 @@ def test_institutional_accumulation():
 def test_smart_money_active_10d_window_includes_today_and_9_prior_days():
     closes = rising(45)
     vols = [1000] * 45
-    vols[25] = 3000  # accumulation on row 25 (no pocket pivots: SMA50 is undefined before row 49)
+    vols[25] = 3000  # accumulation on row 25 (no pocket pivots: EMA50 is undefined before row 49)
     out = add_smart_money_footprint(bars(closes, vols))
     active = out["smart_money_active_10d"]
     assert not active.loc[24] and active.loc[25:34].all() and not active.loc[35]
@@ -129,10 +129,10 @@ def test_missing_columns_rejected():
         add_smart_money_footprint(bars(rising(5)).drop(columns="volume"))
 
 
-# Smart-money filtered SMA 20/50 strategy ------------------------------------------
+# Smart-money filtered EMA 20/50 strategy ------------------------------------------
 
 def crossover_case(crossover_volume: int) -> pd.DataFrame:
-    """Flat at 100 with a high-volume dip on row 55, then a jump to 110 on row 60 (SMA20 crosses SMA50)."""
+    """Flat at 100 with a high-volume dip on row 55, then a jump to 110 on row 60 (EMA20 crosses EMA50)."""
     closes = [100.0] * 60 + [110.0] + [110.0] * 5
     closes[55] = 99.9
     vols = [1000] * 66
@@ -158,9 +158,9 @@ def test_pocket_pivot_reentry_in_an_established_uptrend():
     out = generate_smart_money_signals(bars(closes))
     day = 105  # 130 -> 131 on normal volume, no down days in the prior 10: a pocket pivot
     assert out.loc[day, "pocket_pivot"]
-    assert out.loc[day, "sma20"] > out.loc[day, "sma50"] and abs(out.loc[day, "close"] / out.loc[day, "sma20"] - 1) <= 0.05
+    assert out.loc[day, "ema20"] > out.loc[day, "ema50"] and abs(out.loc[day, "close"] / out.loc[day, "ema20"] - 1) <= 0.05
     assert out.loc[day, "buy_signal"] and not out.loc[day, "baseline_buy_signal"]
-    # Early in the rise the close is far above SMA20, so pivots there are not re-entries.
+    # Early in the rise the close is far above EMA20, so pivots there are not re-entries.
     assert out.loc[62, "pocket_pivot"] and not out.loc[62, "buy_signal"]
 
 
