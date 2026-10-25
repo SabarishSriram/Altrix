@@ -13,6 +13,13 @@ export const TERMS = {
   CHANGE: "Change from the stock's previous stored daily close.",
   SIGNAL_DATE: "Date of the BUY or SELL crossover. Empty for HOLD.",
   DATA_AS_OF: "Latest completed trading day in the stored data. Signals use that day's close.",
+  VOL_SPIKE: "Today's volume divided by the average volume of the last 20 trading days (including today). 2.0x = twice the usual.",
+  CLV: "Close location value: where the close sits in the day's range. 1 = closed at the high (buyers in control), 0 = at the low.",
+  POCKET_PIVOT: "Up day whose volume beats every down-day volume of the prior 10 trading days, closing at or above 95% of SMA50.",
+  ACCUMULATION: "Institutional accumulation: up day with at least 2x average volume and a close in the upper half of the range (CLV >= 0.5).",
+  ACTIVE_10D: "A pocket pivot or institutional accumulation happened on one of the last 10 trading days (including today).",
+  TREND: "SMA20 above SMA50 = uptrend; at or below = downtrend. Needs 50 daily bars.",
+  DELIV_SPIKE: "NSE deliverable quantity divided by its 20-day average. Flagged at 2x or more with at least 55% of traded shares delivered.",
 } as const;
 
 export type TermKey = keyof typeof TERMS;

@@ -2,6 +2,7 @@
 data/raw/*
 data/processed/*
 data/results/
+data/deliverables/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 # Committed so CI and the Vercel API work when NSE blocks cloud IPs (refreshed by download_data.py)

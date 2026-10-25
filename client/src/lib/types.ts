@@ -157,11 +157,22 @@ export interface BacktestMetrics {
   losing_trades: number;
   win_rate: number;
   avg_trade_return: number | null;
+  /** Gross profit / gross loss of completed trades; null without a losing trade. */
+  profit_factor: number | null;
+  /** Average net P&L per completed trade, INR. */
+  expectancy: number | null;
   total_net_pnl: number;
   total_transaction_costs: number;
   avg_holding_days: number | null;
   open_positions: number;
   [key: string]: number | string | null;
+}
+
+export type StrategyKey = "baseline" | "smart_money";
+
+export interface StrategyChoice {
+  key: StrategyKey;
+  name: string;
 }
 
 export interface BacktestParams {
@@ -170,6 +181,19 @@ export interface BacktestParams {
   max_position_weight: number;
   /** Lookback in years, ending on the latest stored date. */
   years: number;
+  strategy: StrategyKey;
+}
+
+/** One strategy's headline metrics on identical settings (fractions, expectancy in INR). */
+export interface ComparisonRow {
+  strategy: StrategyChoice;
+  total_return: number | null;
+  cagr: number | null;
+  max_drawdown: number | null;
+  profit_factor: number | null;
+  win_rate: number | null;
+  expectancy: number | null;
+  completed_trades: number;
 }
 
 export interface BacktestResponse {
@@ -177,9 +201,14 @@ export interface BacktestResponse {
     initial_capital: number;
     transaction_cost: number;
     max_position_weight: number;
+    /** A BUY is skipped unless its budget is at least this fraction of equity. */
+    min_position_weight: number;
     start: string | null;
     end: string | null;
   };
+  strategy: StrategyChoice;
+  /** Baseline vs Smart Money, present when strategy is "smart_money". */
+  comparison: ComparisonRow[] | null;
   data_start: string;
   data_end: string;
   symbols: number;
@@ -225,5 +254,58 @@ export interface MetaResponse {
     initial_capital: number;
     transaction_cost: number;
     max_position_weight: number;
+    min_position_weight: number;
   };
+  strategies: StrategyChoice[];
+}
+
+export type Trend = "UPTREND" | "DOWNTREND" | "INSUFFICIENT_DATA";
+
+export interface SmartMoneyStock {
+  symbol: string;
+  name: string | null;
+  date: string;
+  close: number | null;
+  /** Percent vs the previous stored bar. */
+  return_1d_pct: number | null;
+  volume: number | null;
+  /** Volume / 20-day average volume. */
+  vol_spike_ratio: number | null;
+  /** Close location value: 0 = closed at the low, 1 = at the high. */
+  clv: number | null;
+  pocket_pivot: boolean;
+  institutional_accumulation: boolean;
+  smart_money_active_10d: boolean;
+  sma20: number | null;
+  sma50: number | null;
+  trend: Trend;
+  deliv_qty: number | null;
+  /** Percent of traded quantity. */
+  deliv_per: number | null;
+  deliv_spike_ratio: number | null;
+  delivery_spike: boolean;
+  note: string | null;
+}
+
+export interface SmartMoneyResponse {
+  data_as_of: string | null;
+  scanned_at: string;
+  universe: string;
+  deliverables_available: boolean;
+  deliverables_as_of: string | null;
+  pocket_pivot_count: number;
+  accumulation_count: number;
+  active_10d_count: number;
+  delivery_spike_count: number;
+  rules: {
+    volume_window: number;
+    pocket_pivot_lookback: number;
+    pocket_pivot_sma50_floor: number;
+    accumulation_spike: number;
+    accumulation_clv: number;
+    memory_days: number;
+    delivery_spike: number;
+    delivery_min_per: number;
+  };
+  stocks: SmartMoneyStock[];
 }

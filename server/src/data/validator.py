@@ -18,6 +18,10 @@ import pandas as pd
 
 from .provider import SCHEMA
 
+# A one-day close-to-close fall this large is rarely a real trade: Yahoo often leaves
+# demergers (VEDL.NS 2026-04-30, TMPV.NS 2025-10-14) unadjusted for a while.
+CORPORATE_ACTION_DROP = -0.35
+
 
 @dataclass
 class ValidationReport:
@@ -29,6 +33,8 @@ class ValidationReport:
     suspicious_missing_dates: list[pd.Timestamp] = field(default_factory=list)
     holidays_skipped: int = 0  # weekdays absent from the calendar: normal, not an issue
     non_trading_day_bars: list[pd.Timestamp] = field(default_factory=list)  # bars the market didn't trade
+    # Days the close fell by CORPORATE_ACTION_DROP or more: possibly an unadjusted split/demerger.
+    corporate_action_suspects: list[pd.Timestamp] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -56,6 +62,20 @@ def build_trading_calendar(frames: list[pd.DataFrame], min_fraction: float = 0.5
         listed += (present.index >= lo) & (present.index <= hi)
     keep = present[present >= min_fraction * listed].index
     return pd.DatetimeIndex(sorted(keep))
+
+
+def large_price_drops(df: pd.DataFrame, threshold: float = CORPORATE_ACTION_DROP) -> pd.DataFrame:
+    """Rows whose close fell by `threshold` or more versus the previous row's close.
+
+    Returns date, prev_close, close and return (a fraction, e.g. -0.65). One
+    symbol per frame; rows are compared in date order.
+    """
+    df = df.sort_values("date")
+    prev = df["close"].shift(1)
+    ret = df["close"] / prev - 1
+    hit = ret <= threshold
+    return pd.DataFrame({"date": df.loc[hit, "date"], "prev_close": prev[hit],
+                         "close": df.loc[hit, "close"], "return": ret[hit]}).reset_index(drop=True)
 
 
 def check_schema(df: pd.DataFrame) -> list[str]:
@@ -110,6 +130,16 @@ def validate(df: pd.DataFrame, symbol: str, calendar: pd.DatetimeIndex | None = 
     if bad_ohlc.any():
         first = full.loc[bad_ohlc, "date"].iloc[0].date()
         report.errors.append(f"{int(bad_ohlc.sum())} row(s) violate low <= open/close <= high, e.g. {first}")
+
+    suspects = large_price_drops(full)
+    if not suspects.empty:
+        report.corporate_action_suspects = list(suspects["date"])
+        worst = suspects.loc[suspects["return"].idxmin()]
+        report.warnings.append(
+            f"{len(suspects)} one-day close drop(s) of {abs(CORPORATE_ACTION_DROP):.0%} or more "
+            f"(possible unadjusted split/demerger; verify before trusting trades), e.g. "
+            f"{worst['date'].date()} {worst['return']:+.1%}"
+        )
 
     if calendar is None or not len(calendar):
         n = int((df["volume"] == 0).sum())

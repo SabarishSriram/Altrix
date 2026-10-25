@@ -61,6 +61,11 @@ def raw_dir() -> Path:
     return Path(os.environ.get("ALTRIX_RAW_DIR", dash.ROOT / "data" / "raw"))
 
 
+def deliverables_dir() -> Path:
+    """Where optional NSE deliverable data lives (override with ALTRIX_DELIVERABLES_DIR)."""
+    return Path(os.environ.get("ALTRIX_DELIVERABLES_DIR", dash.ROOT / "data" / "deliverables"))
+
+
 def load_universe() -> list[dict]:
     """Current NIFTY 100 constituents via the existing universe module.
 

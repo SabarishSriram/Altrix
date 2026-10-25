@@ -10,6 +10,7 @@ import type {
   RecentSignalsResponse,
   RefreshStatus,
   ScannerResponse,
+  SmartMoneyResponse,
 } from "@/lib/types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
@@ -73,12 +74,14 @@ export const api = {
   scanner: () => request<ScannerResponse>("/api/scanner"),
   history: (symbol: string) => request<HistoryResponse>(`/api/scanner/${symbolPath(symbol)}/history`),
   recentSignals: (days = 30) => request<RecentSignalsResponse>(`/api/signals/recent?days=${days}`),
+  smartMoney: () => request<SmartMoneyResponse>("/api/smart-money"),
   backtest: (params: BacktestParams) => {
     const q = new URLSearchParams({
       initial_capital: String(params.initial_capital),
       transaction_cost: String(params.transaction_cost),
       max_position_weight: String(params.max_position_weight),
       years: String(params.years),
+      strategy: params.strategy,
     });
     return request<BacktestResponse>(`/api/backtest?${q}`);
   },

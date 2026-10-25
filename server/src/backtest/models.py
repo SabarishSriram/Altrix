@@ -17,6 +17,8 @@ class BacktestConfig:
     initial_capital: float = 100_000.0
     transaction_cost: float = 0.001  # fraction of traded value, charged on BUY and on SELL
     max_position_weight: float = 0.10  # max fraction of portfolio equity per new position
+    # A BUY is skipped unless its budget is at least this fraction of equity (no "cash dust" trades).
+    min_position_weight: float = 0.05
 
     def __post_init__(self) -> None:
         if self.initial_capital <= 0:
@@ -25,6 +27,9 @@ class BacktestConfig:
             raise ValueError(f"transaction_cost must be in [0, 1), got {self.transaction_cost}")
         if not 0 < self.max_position_weight <= 1:
             raise ValueError(f"max_position_weight must be in (0, 1], got {self.max_position_weight}")
+        if not 0 <= self.min_position_weight <= self.max_position_weight:
+            raise ValueError(f"min_position_weight must be in [0, max_position_weight="
+                             f"{self.max_position_weight}], got {self.min_position_weight}")
 
 
 @dataclass

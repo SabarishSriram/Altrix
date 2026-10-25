@@ -6,11 +6,12 @@ Usage:
 
 OUT_DIR gets only what the API needs at runtime: api/, src/, the two app/
 modules the API reuses, the stored Parquet files, the constituent snapshot,
-and deploy/vercel-api/ (entrypoint, pinned requirements, Vercel config).
+the optional NSE deliverables file (if downloaded), and deploy/vercel-api/
+(entrypoint, pinned requirements, Vercel config).
 Streamlit, tests, the frontend and the dev requirements stay out, which keeps
 the Python bundle under Vercel's size limit.
 
-Reads ALTRIX_DATA_DIR / ALTRIX_RAW_DIR like the app. Never downloads anything:
+Reads ALTRIX_DATA_DIR / ALTRIX_RAW_DIR / ALTRIX_DELIVERABLES_DIR like the app. Never downloads anything:
 run scripts/download_data.py first. Used by .github/workflows/deploy-api.yml at the
 repository root.
 """
@@ -26,7 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.dashboard import processed_dir  # noqa: E402
-from app.scanner_ui import SNAPSHOT_NAME, raw_dir  # noqa: E402
+from app.scanner_ui import SNAPSHOT_NAME, deliverables_dir, raw_dir  # noqa: E402
+from src.data.deliverables import DeliverableStore  # noqa: E402
 
 DEPLOY_DIR = Path("deploy") / "vercel-api"
 PACKAGES = ["api", "src"]
@@ -38,7 +40,7 @@ class StageError(Exception):
     """The inputs are missing or OUT_DIR is not safe to replace."""
 
 
-def stage(out: Path, data_dir: Path, raw: Path) -> dict:
+def stage(out: Path, data_dir: Path, raw: Path, deliverables: Path | None = None) -> dict:
     """Build `out` from scratch. Returns counts for the summary line."""
     out = Path(out)
     parquet = sorted(Path(data_dir).glob("*.parquet"))
@@ -63,7 +65,11 @@ def stage(out: Path, data_dir: Path, raw: Path) -> dict:
     for src in parquet:
         _copy(src, out / "data" / "processed" / src.name)
     _copy(snapshot, out / "data" / "raw" / SNAPSHOT_NAME)
-    return {"code_files": len(code), "symbols": len(parquet)}
+    deliv_file = None if deliverables is None else Path(deliverables) / DeliverableStore.FILENAME
+    has_deliverables = deliv_file is not None and deliv_file.exists()
+    if has_deliverables:
+        _copy(deliv_file, out / "data" / "deliverables" / DeliverableStore.FILENAME)
+    return {"code_files": len(code), "symbols": len(parquet), "deliverables": has_deliverables}
 
 
 def _copy(src: Path, dst: Path) -> None:
@@ -76,11 +82,12 @@ def main() -> int:
     parser.add_argument("out", type=Path, help="folder to create (replaced if a previous run created it)")
     args = parser.parse_args()
     try:
-        counts = stage(args.out, processed_dir(), raw_dir())
+        counts = stage(args.out, processed_dir(), raw_dir(), deliverables_dir())
     except StageError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"Staged {counts['code_files']} code files and {counts['symbols']} symbols in {args.out.resolve()}")
+    extra = " + NSE deliverables" if counts["deliverables"] else ""
+    print(f"Staged {counts['code_files']} code files and {counts['symbols']} symbols{extra} in {args.out.resolve()}")
     return 0
 
 

@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from app.scanner_ui import SNAPSHOT_NAME
@@ -92,3 +93,18 @@ def test_requires_data_and_snapshot(tmp_path):
     (raw / SNAPSHOT_NAME).unlink()
     with pytest.raises(stage_api_deploy.StageError, match="no constituent snapshot"):
         stage_api_deploy.stage(tmp_path / "out", processed, raw)
+
+
+def test_stages_deliverables_when_present(tmp_path):
+    from src.data.deliverables import DeliverableStore
+
+    processed, raw = make_world(tmp_path)
+    store = DeliverableStore(tmp_path / "deliverables")
+    store.append(pd.DataFrame({"date": [pd.Timestamp("2026-08-24")], "symbol": ["BUYCO.NS"],
+                               "deliv_qty": [1.0], "deliv_per": [60.0]}))
+    counts = stage_api_deploy.stage(tmp_path / "out", processed, raw, tmp_path / "deliverables")
+    assert counts["deliverables"] is True
+    assert (tmp_path / "out" / "data" / "deliverables" / "deliverables.parquet").is_file()
+
+    counts = stage_api_deploy.stage(tmp_path / "out", processed, raw, tmp_path / "nothing-here")
+    assert counts["deliverables"] is False

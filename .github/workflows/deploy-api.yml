@@ -24,6 +24,7 @@ on:
       - "server/deploy/vercel-api/**"
       - "server/scripts/download_data.py"
       - "server/scripts/stage_api_deploy.py"
+      - "server/scripts/download_deliverables.py"
       - "server/data/raw/nifty100_constituents.csv"
       - "server/requirements.txt"
       - ".github/workflows/deploy-api.yml"
@@ -88,6 +89,7 @@ jobs:
           path: |
             server/data/processed
             server/data/raw
+            server/data/deliverables
           key: market-data-${{ github.run_id }}
           restore-keys: market-data-
 
@@ -95,12 +97,17 @@ jobs:
         # Exit code 1 means some symbols failed or did not validate: deploy what is stored.
         run: python scripts/download_data.py || echo "::warning::download_data.py reported failures; deploying the stored data"
 
+      - name: Download NSE deliverables (optional)
+        # NSE may block GitHub's IPs; the Smart Money tab then simply omits delivery columns.
+        run: python scripts/download_deliverables.py || echo "::warning::NSE deliverables unavailable; deploying without new delivery data"
+
       - name: Save market data
         uses: actions/cache/save@v4
         with:
           path: |
             server/data/processed
             server/data/raw
+            server/data/deliverables
           key: market-data-${{ github.run_id }}
 
       - name: Stage API

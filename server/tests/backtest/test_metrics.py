@@ -74,3 +74,18 @@ def test_zero_trades_and_empty_curve_are_safe():
     assert m["final_equity"] == 100_000 and m["total_return"] == 0
     assert m["win_rate"] == 0.0 and m["avg_trade_return"] is None
     assert m["max_drawdown"] == 0.0 and m["cagr"] is None
+
+
+# Profit factor and expectancy ---------------------------------------------------
+
+def test_profit_factor_and_expectancy():
+    trades = [trade(300, 0.03), trade(-100, -0.01), trade(100, 0.01), trade(-200, -0.02)]
+    m = compute_metrics(trades, curve([100_000, 100_100]), 100_000)
+    assert m["profit_factor"] == pytest.approx(400 / 300)  # gross profit / gross loss
+    assert m["expectancy"] == pytest.approx(100 / 4)       # average net P&L per trade (INR)
+
+
+def test_profit_factor_undefined_without_losses_and_expectancy_without_trades():
+    assert compute_metrics([trade(50, 0.01)], curve([100, 101]), 100)["profit_factor"] is None
+    m = compute_metrics([], curve([100, 100]), 100)
+    assert m["profit_factor"] is None and m["expectancy"] is None

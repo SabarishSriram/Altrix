@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 import pandas as pd
 
@@ -143,3 +144,31 @@ def test_late_listing_not_flagged_for_dates_before_listing():
     newcomer = make_bars("NEW.NS", dates=days[10:])
     calendar = build_trading_calendar(peers + [newcomer])
     assert validate(newcomer, "NEW.NS", calendar).suspicious_missing_dates == []
+
+
+# --- corporate actions -----------------------------------------------------------
+
+def test_large_one_day_drop_flagged_as_possible_corporate_action(bars):
+    df = bars.copy()
+    df.loc[6:, ["open", "high", "low", "close"]] *= 0.35  # a VEDL-style unadjusted demerger: -65%
+    report = validate(df, "TEST.NS")
+    assert report.ok  # a warning to verify, never an error or a fix
+    assert report.corporate_action_suspects == [df.loc[6, "date"]]
+    assert any("possible unadjusted split/demerger" in w for w in report.warnings)
+
+
+def test_ordinary_fall_is_not_flagged(bars):
+    df = bars.copy()
+    df.loc[6:, ["open", "high", "low", "close"]] *= 0.7  # -30%: large, but above the -35% threshold
+    report = validate(df, "TEST.NS")
+    assert report.corporate_action_suspects == [] and report.warnings == []
+
+
+def test_large_price_drops_lists_the_events(bars):
+    from src.data.validator import large_price_drops
+
+    df = bars.copy()
+    df.loc[3:, "close"] *= 0.5
+    drops = large_price_drops(df)
+    assert drops["date"].tolist() == [df.loc[3, "date"]]
+    assert drops["return"].iloc[0] == pytest.approx(df.loc[3, "close"] / df.loc[2, "close"] - 1)

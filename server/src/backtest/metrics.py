@@ -57,6 +57,8 @@ def compute_metrics(
     wins = sum(t.net_pnl > 0 for t in trades)
     losses = sum(t.net_pnl < 0 for t in trades)
     total_return = final_equity / initial_capital - 1
+    gross_profit = sum(t.net_pnl for t in trades if t.net_pnl > 0)
+    gross_loss = -sum(t.net_pnl for t in trades if t.net_pnl < 0)
 
     return {
         "start_date": None if start is None else str(pd.Timestamp(start).date()),
@@ -73,6 +75,10 @@ def compute_metrics(
         "losing_trades": losses,
         "win_rate": wins / n if n else 0.0,
         "avg_trade_return": sum(t.return_pct for t in trades) / n if n else None,
+        # Gross profit / gross loss of completed trades (net of costs); None without a losing trade.
+        "profit_factor": gross_profit / gross_loss if gross_loss > 0 else None,
+        # Average net P&L per completed trade in INR: win_rate * avg_win - loss_rate * avg_loss.
+        "expectancy": sum(t.net_pnl for t in trades) / n if n else None,
         "total_net_pnl": sum(t.net_pnl for t in trades),
         "total_transaction_costs": sum(t.transaction_cost for t in trades),  # completed trades only
         "avg_holding_days": sum(t.holding_days for t in trades) / n if n else None,

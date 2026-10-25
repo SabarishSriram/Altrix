@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 Signal = Literal["BUY", "SELL", "HOLD", "INSUFFICIENT_DATA"]
 Crossover = Literal["BUY", "SELL"]
+StrategyKey = Literal["baseline", "smart_money"]
+Trend = Literal["UPTREND", "DOWNTREND", "INSUFFICIENT_DATA"]
 
 
 class StrategyInfo(BaseModel):
@@ -154,12 +156,32 @@ class BacktestConfigOut(BaseModel):
     initial_capital: float
     transaction_cost: float
     max_position_weight: float
+    min_position_weight: float
     start: str | None
     end: str | None
 
 
+class StrategyChoice(BaseModel):
+    key: StrategyKey
+    name: str
+
+
+class ComparisonRow(BaseModel):
+    """Headline metrics of one strategy on identical settings (fractions, except expectancy in INR)."""
+
+    strategy: StrategyChoice
+    total_return: float | None
+    cagr: float | None
+    max_drawdown: float | None
+    profit_factor: float | None  # None when there is no losing trade
+    win_rate: float | None
+    expectancy: float | None  # average net P&L per completed trade, INR
+    completed_trades: int
+
+
 class BacktestResponse(BaseModel):
     config: BacktestConfigOut
+    strategy: StrategyChoice
     data_start: str
     data_end: str
     symbols: int
@@ -167,6 +189,54 @@ class BacktestResponse(BaseModel):
     equity_curve: list[EquityPoint]
     trades: list[TradeRecord]
     open_positions: list[OpenPositionRecord]
+    comparison: list[ComparisonRow] | None  # baseline vs smart money, when strategy=smart_money
+
+
+class SmartMoneyStock(BaseModel):
+    symbol: str
+    name: str | None
+    date: str  # the stock's latest bar
+    close: float | None
+    return_1d_pct: float | None  # percent, vs the previous stored bar
+    volume: int | None
+    vol_spike_ratio: float | None  # volume / 20-day average volume
+    clv: float | None  # close location value, 0 (low) .. 1 (high)
+    pocket_pivot: bool
+    institutional_accumulation: bool
+    smart_money_active_10d: bool
+    sma20: float | None
+    sma50: float | None
+    trend: Trend
+    deliv_qty: float | None  # NSE deliverable quantity, when deliverable data is stored
+    deliv_per: float | None  # percent of traded quantity
+    deliv_spike_ratio: float | None
+    delivery_spike: bool
+    note: str | None
+
+
+class SmartMoneyRules(BaseModel):
+    volume_window: int
+    pocket_pivot_lookback: int
+    pocket_pivot_sma50_floor: float
+    accumulation_spike: float
+    accumulation_clv: float
+    memory_days: int
+    delivery_spike: float
+    delivery_min_per: float
+
+
+class SmartMoneyResponse(BaseModel):
+    data_as_of: str | None
+    scanned_at: str
+    universe: str
+    deliverables_available: bool
+    deliverables_as_of: str | None
+    pocket_pivot_count: int
+    accumulation_count: int
+    active_10d_count: int
+    delivery_spike_count: int
+    rules: SmartMoneyRules
+    stocks: list[SmartMoneyStock]
 
 
 class RefreshStatus(BaseModel):
@@ -198,6 +268,7 @@ class BacktestDefaults(BaseModel):
     initial_capital: float
     transaction_cost: float
     max_position_weight: float
+    min_position_weight: float
 
 
 class MetaResponse(BaseModel):
@@ -207,3 +278,4 @@ class MetaResponse(BaseModel):
     offline_mode: bool
     downloads_enabled: bool
     backtest_defaults: BacktestDefaults
+    strategies: list[StrategyChoice]

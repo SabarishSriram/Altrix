@@ -5,6 +5,7 @@
     universe  -> app.scanner_ui.load_universe (NSE list, local snapshot fallback)
     scan      -> src.scanner.run_universe_scan (runs src.strategy.baseline)
     backtest  -> app.dashboard.run_dashboard_backtest (runs src.backtest.run_backtest)
+    smart money -> src.scanner.scan_smart_money (runs src.strategy.smart_money) on the scan's data
     download  -> app.scanner_ui.refresh_market_data (the incremental downloader)
 
 The scan and the loaded market data are cached under the data fingerprint
@@ -31,7 +32,11 @@ from app import dashboard as dash
 from app import scanner_ui as ui
 from src.backtest import BacktestResult
 from src.data import ParquetStore
-from src.scanner import BUY, HOLD, INSUFFICIENT_DATA, SELL, ScanResult, recent_crossovers, run_universe_scan
+from src.data import deliverables as deliv
+from src.data.deliverables import DeliverableStore
+from src.scanner import (BUY, HOLD, INSUFFICIENT_DATA, SELL, ScanResult, recent_crossovers, run_universe_scan,
+                         scan_smart_money)
+from src.strategy import smart_money as sm
 from src.strategy.baseline import LONG_WINDOW, SHORT_WINDOW
 
 logger = logging.getLogger("altrix.api")
@@ -132,8 +137,15 @@ class AltrixService:
         data_dir: Path | None = None,
         universe_loader: Callable[[], list[dict]] = ui.load_universe,
         refresher: Callable[[list[str], ParquetStore], list] = ui.refresh_market_data,
+        deliverables_dir: Path | None = None,
     ):
         self.data_dir = Path(data_dir) if data_dir is not None else dash.processed_dir()
+        if deliverables_dir is not None:
+            self.deliverables = DeliverableStore(deliverables_dir)
+        else:  # next to the processed data unless configured
+            self.deliverables = DeliverableStore(
+                ui.deliverables_dir() if data_dir is None else self.data_dir.parent / "deliverables")
+        self._smart_money: tuple[tuple, pd.DataFrame] | None = None
         self._load_universe = universe_loader
         self._refresher = refresher
         self._universe: list[dict] | None = None
@@ -274,6 +286,69 @@ class AltrixService:
             } for _, c in recent.iterrows()],
             "daily_counts": [{"date": iso_date(d), "buy": int(v["buy_signal"]), "sell": int(v["sell_signal"])}
                              for d, v in daily.iterrows()],
+        }
+
+    # ---- smart money --------------------------------------------------------------------------
+
+    def smart_money(self) -> dict:
+        """Latest-day institutional footprint per stock, cached with the scan (and the deliverables file)."""
+        cached = self.scan()
+        r = cached.result
+        path = self.deliverables.path
+        key = (cached.key, path.stat().st_mtime if path.exists() else None)
+        with self._lock:
+            if self._smart_money is None or self._smart_money[0] != key:
+                stored = self.deliverables.load() if path.exists() else None
+                names = dict(zip(r.table["symbol"], r.table["name"]))
+                table = scan_smart_money(r.strategy_frame, r.as_of, stored, names)
+                self._smart_money = (key, table)
+            table = self._smart_money[1]
+            stored_dates = self.deliverables.dates() if path.exists() else set()
+
+        def flag(col: str) -> int:
+            return int(table[col].sum()) if not table.empty else 0
+
+        return {
+            "data_as_of": iso_date(r.as_of),
+            "scanned_at": cached.scanned_at,
+            "universe": ui.UNIVERSE_NAME,
+            "deliverables_available": bool(stored_dates),
+            "deliverables_as_of": iso_date(max(stored_dates)) if stored_dates else None,
+            "pocket_pivot_count": flag("pocket_pivot"),
+            "accumulation_count": flag("institutional_accumulation"),
+            "active_10d_count": flag("smart_money_active_10d"),
+            "delivery_spike_count": flag("delivery_spike"),
+            "rules": {
+                "volume_window": sm.VOLUME_WINDOW,
+                "pocket_pivot_lookback": sm.POCKET_PIVOT_LOOKBACK,
+                "pocket_pivot_sma50_floor": sm.POCKET_PIVOT_SMA50_FLOOR,
+                "accumulation_spike": sm.ACCUMULATION_SPIKE,
+                "accumulation_clv": sm.ACCUMULATION_CLV,
+                "memory_days": sm.MEMORY_DAYS,
+                "delivery_spike": deliv.DELIVERY_SPIKE,
+                "delivery_min_per": deliv.DELIVERY_MIN_PER,
+            },
+            "stocks": [{
+                "symbol": row.symbol,
+                "name": row.name or None,
+                "date": iso_date(row.date),
+                "close": num(row.close),
+                "return_1d_pct": num(row.return_1d_pct),
+                "volume": None if pd.isna(row.volume) else int(row.volume),
+                "vol_spike_ratio": num(row.vol_spike_ratio),
+                "clv": num(row.clv),
+                "pocket_pivot": bool(row.pocket_pivot),
+                "institutional_accumulation": bool(row.institutional_accumulation),
+                "smart_money_active_10d": bool(row.smart_money_active_10d),
+                "sma20": num(row.sma20),
+                "sma50": num(row.sma50),
+                "trend": row.trend,
+                "deliv_qty": num(row.deliv_qty),
+                "deliv_per": num(row.deliv_per),
+                "deliv_spike_ratio": num(row.deliv_spike_ratio),
+                "delivery_spike": bool(row.delivery_spike),
+                "note": row.note or None,
+            } for row in table.itertuples(index=False)],
         }
 
     # ---- backtest ---------------------------------------------------------------------------

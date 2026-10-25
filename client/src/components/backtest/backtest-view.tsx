@@ -16,27 +16,38 @@ import { useResource } from "@/hooks/use-resource";
 import { api } from "@/lib/api";
 import { displaySymbol, formatDate, formatFraction, formatNumber, formatPrice, trend, trendClass } from "@/lib/format";
 import { stockHref } from "@/lib/routes";
-import type { BacktestParams, BacktestResponse } from "@/lib/types";
+import type { BacktestParams, BacktestResponse, ComparisonRow } from "@/lib/types";
 
 const TRADE_PAGE = 50;
 const PERIODS = [1, 2, 3, 5, 10] as const;
 const DEFAULT_YEARS = 10;
+const DEFAULT_MIN_WEIGHT = 0.05;
+const SMART_MONEY_LABEL = "Require 10-Day Smart Money Confirmation for SMA 20/50 Entry";
 
 interface FormState {
   capital: string;
   costPct: string;
   weightPct: string;
   years: number;
+  smartMoney: boolean;
 }
 
-function toParams(f: FormState): BacktestParams | string {
+function toParams(f: FormState, minWeight: number): BacktestParams | string {
   const capital = Number(f.capital);
   const cost = Number(f.costPct) / 100;
   const weight = Number(f.weightPct) / 100;
   if (!Number.isFinite(capital) || capital <= 0) return "Initial capital must be greater than zero.";
   if (!Number.isFinite(cost) || cost < 0 || cost >= 1) return "Transaction cost must be between 0% and 100%.";
   if (!Number.isFinite(weight) || weight <= 0 || weight > 1) return "Maximum position weight must be above 0% and at most 100%.";
-  return { initial_capital: capital, transaction_cost: cost, max_position_weight: weight, years: f.years };
+  if (weight < minWeight)
+    return `Maximum position weight must be at least the ${formatFraction(minWeight, { signed: false, decimals: 0 })} minimum position size.`;
+  return {
+    initial_capital: capital,
+    transaction_cost: cost,
+    max_position_weight: weight,
+    years: f.years,
+    strategy: f.smartMoney ? "smart_money" : "baseline",
+  };
 }
 
 function Field({ id, label, hint, children }: { id: string; label: string; hint?: string; children: React.ReactNode }) {
@@ -59,19 +70,22 @@ export function BacktestView() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const defaults = meta.data?.backtest_defaults;
+  const minWeight = defaults?.min_position_weight ?? DEFAULT_MIN_WEIGHT;
   const f: FormState = form ?? {
     capital: String(defaults?.initial_capital ?? 100000),
     costPct: String((defaults?.transaction_cost ?? 0.001) * 100),
     weightPct: String((defaults?.max_position_weight ?? 0.1) * 100),
     years: DEFAULT_YEARS,
+    smartMoney: false,
   };
+  const smartMoneyName = meta.data?.strategies.find((s) => s.key === "smart_money")?.name ?? "20 / 50 SMA + Smart Money";
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...f, [k]: e.target.value });
 
   const result = useResource(run ? JSON.stringify(run) : null, () => api.backtest(run!));
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const p = toParams(f);
+    const p = toParams(f, minWeight);
     if (typeof p === "string") return setFormError(p);
     setFormError(null);
     if (run && JSON.stringify(p) === JSON.stringify(run)) void result.reload();
@@ -85,8 +99,12 @@ export function BacktestView() {
       <form onSubmit={submit} className="rounded-lg border bg-card p-4" aria-label="Backtest settings">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
           <Field id="bt-strategy" label="Strategy">
-            <div id="bt-strategy" className="flex h-8 items-center truncate rounded-md border bg-surface px-2.5 text-[13px]">
-              {meta.data?.strategy.name ?? "20 / 50 SMA Crossover"}
+            <div
+              id="bt-strategy"
+              className="flex h-8 items-center truncate rounded-md border bg-surface px-2.5 text-[13px]"
+              title={f.smartMoney ? smartMoneyName : undefined}
+            >
+              {f.smartMoney ? smartMoneyName : (meta.data?.strategy.name ?? "20 / 50 SMA Crossover")}
             </div>
           </Field>
           <Field id="bt-capital" label="Initial capital (₹)">
@@ -124,10 +142,27 @@ export function BacktestView() {
             <p className="text-[11px] text-muted-foreground">Ending on the latest stored trading day</p>
           </div>
         </div>
+        <label htmlFor="bt-smart-money" className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-md border bg-surface px-3 py-2.5">
+          <input
+            id="bt-smart-money"
+            type="checkbox"
+            checked={f.smartMoney}
+            onChange={(e) => setForm({ ...f, smartMoney: e.target.checked })}
+            className="mt-0.5 size-4 shrink-0 accent-foreground"
+          />
+          <span>
+            <span className="block text-[13px] font-medium">{SMART_MONEY_LABEL}</span>
+            <span className="block text-xs text-muted-foreground">
+              BUY only when SMA20 crosses above SMA50 and a pocket pivot or institutional accumulation happened in the last 10 days, or
+              on a fresh pocket pivot within 5% of SMA20 while SMA20 is already above SMA50. SELL rule unchanged. Adds a side-by-side
+              comparison with the baseline.
+            </span>
+          </span>
+        </label>
         <div className="mt-4 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className={cn("text-xs", formError ? "text-loss" : "text-muted-foreground")} role={formError ? "alert" : undefined}>
             {formError ??
-              "Signals fill at the next trading day's open. Long-only, whole shares, flat costs. Survivorship bias: today's NIFTY 100 only."}
+              `Signals fill at the next trading day's open; same-day BUYs are ranked by 20-day momentum and skipped below a ${formatFraction(minWeight, { signed: false, decimals: 0 })} position. Long-only, whole shares, flat costs. Survivorship bias: today's NIFTY 100 only.`}
           </p>
           <Button type="submit" disabled={busy} className="shrink-0">
             {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
@@ -175,6 +210,64 @@ function Panel({ title, description, children }: { title: string; description?: 
   );
 }
 
+const COMPARISON_METRICS: {
+  label: string;
+  /** Highlight the larger value (drawdowns are negative, so closer to zero wins too); null: no highlight. */
+  higherIsBetter: boolean | null;
+  value: (r: ComparisonRow) => number | null;
+  format: (v: number | null) => string;
+}[] = [
+  { label: "CAGR", higherIsBetter: true, value: (r) => r.cagr, format: (v) => formatFraction(v) },
+  { label: "Total return", higherIsBetter: true, value: (r) => r.total_return, format: (v) => formatFraction(v) },
+  { label: "Max drawdown", higherIsBetter: true, value: (r) => r.max_drawdown, format: (v) => formatFraction(v) },
+  { label: "Profit factor", higherIsBetter: true, value: (r) => r.profit_factor, format: (v) => (v === null ? "—" : v.toFixed(2)) },
+  { label: "Win rate", higherIsBetter: true, value: (r) => r.win_rate, format: (v) => formatFraction(v, { signed: false, decimals: 1 }) },
+  { label: "Expectancy (per trade)", higherIsBetter: true, value: (r) => r.expectancy, format: (v) => formatPrice(v, 0) },
+  { label: "Trade count", higherIsBetter: null, value: (r) => r.completed_trades, format: (v) => formatNumber(v) },
+];
+
+function ComparisonPanel({ rows }: { rows: ComparisonRow[] }) {
+  return (
+    <Panel
+      title="Strategy comparison"
+      description="Same capital, costs, position limits and period; only the entry rule differs. Expectancy is the average net P&L per completed trade."
+    >
+      <div className="-m-4 overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead className="border-b bg-surface text-left text-xs text-muted-foreground">
+            <tr>
+              <th scope="col" className="h-8 px-3 font-medium">Metric</th>
+              {rows.map((r) => (
+                <th key={r.strategy.key} scope="col" className="h-8 px-3 text-right font-medium">
+                  {r.strategy.key === "baseline" ? "Baseline SMA 20/50" : "Smart-Money Filtered SMA 20/50"}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {COMPARISON_METRICS.map((metric) => {
+              const values = rows.map(metric.value);
+              const known = values.filter((v): v is number => v !== null);
+              const best =
+                metric.higherIsBetter && known.length === rows.length && new Set(known).size > 1 ? Math.max(...known) : null;
+              return (
+                <tr key={metric.label} className="border-b last:border-b-0">
+                  <th scope="row" className="px-3 py-2 text-left font-normal text-muted-foreground">{metric.label}</th>
+                  {values.map((v, i) => (
+                    <td key={rows[i].strategy.key} className={cn("num px-3 py-2 text-right", v !== null && v === best && "font-semibold text-gain")}>
+                      {metric.format(v)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
 function BacktestResults({ data, stale }: { data: BacktestResponse; stale: boolean }) {
   const m = data.metrics;
   const [showAll, setShowAll] = useState(false);
@@ -184,9 +277,10 @@ function BacktestResults({ data, stale }: { data: BacktestResponse; stale: boole
   return (
     <div className={cn("flex flex-col gap-5 transition-opacity", stale && "opacity-60")}>
       <p className="num text-xs text-muted-foreground">
-        {formatDate(m.start_date)} – {formatDate(m.end_date)} · {formatNumber(m.trading_days)} trading days · {data.symbols} stocks · stored data{" "}
-        {formatDate(data.data_start)} – {formatDate(data.data_end)}
+        {data.strategy.name} · {formatDate(m.start_date)} – {formatDate(m.end_date)} · {formatNumber(m.trading_days)} trading days ·{" "}
+        {data.symbols} stocks · stored data {formatDate(data.data_start)} – {formatDate(data.data_end)}
       </p>
+      {data.comparison && <ComparisonPanel rows={data.comparison} />}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MetricCard label="Final value" value={formatPrice(m.final_equity, 0)} hint={`from ${formatPrice(m.initial_capital, 0)}`} />
         <MetricCard label="Total return" value={formatFraction(m.total_return)} tone={m.total_return >= 0 ? "gain" : "loss"} hint={m.cagr !== null ? `CAGR ${formatFraction(m.cagr)}` : "CAGR n/a (< 1 year)"} />

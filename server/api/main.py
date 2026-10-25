@@ -15,7 +15,9 @@ import os
 import re
 import threading
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import date
+from typing import Literal
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Path, Query, Request
@@ -92,7 +94,9 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
             "offline_mode": offline_mode(),
             "downloads_enabled": downloads_enabled(),
             "backtest_defaults": {"initial_capital": d.initial_capital, "transaction_cost": d.transaction_cost,
-                                  "max_position_weight": d.max_position_weight},
+                                  "max_position_weight": d.max_position_weight,
+                                  "min_position_weight": d.min_position_weight},
+            "strategies": [{"key": k, "name": name} for k, (name, _) in dash.STRATEGIES.items()],
         }
 
     @app.get("/api/scanner", response_model=s.ScannerResponse, tags=["scanner"])
@@ -121,28 +125,49 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
         """Past crossovers across the universe (context only; current signals are the latest day's)."""
         return svc.recent_signals(days)
 
+    @app.get("/api/smart-money", response_model=s.SmartMoneyResponse, tags=["smart money"])
+    def smart_money():
+        """Volume spike, close location, pocket pivots and accumulation for every stock on the latest date.
+
+        Ranked by vol_spike_ratio. NSE deliverable columns are filled only when
+        data/deliverables/ has been downloaded (scripts/download_deliverables.py).
+        """
+        result = svc.smart_money()
+        if result["data_as_of"] is None:
+            raise HTTPException(503, "No usable price data. Download it first with: python scripts/download_data.py")
+        return result
+
     @app.get("/api/backtest", response_model=s.BacktestResponse, tags=["backtest"])
     def backtest(
         initial_capital: float = Query(100_000.0, gt=0),
         transaction_cost: float = Query(0.001, ge=0, lt=1, description="Fraction per BUY and per SELL"),
         max_position_weight: float = Query(0.10, gt=0, le=1),
+        min_position_weight: float = Query(0.05, ge=0, le=1, description="Skip a BUY whose budget is below this fraction of equity"),
+        strategy: Literal["baseline", "smart_money"] = Query(
+            "baseline", description="smart_money: SMA 20/50 entries need 10-day Smart Money confirmation; "
+                                    "the response then also compares it with the baseline"),
         years: int | None = Query(None, ge=1, le=30, description="Lookback ending on the latest stored date (instead of start/end)"),
         start: date | None = Query(None),
         end: date | None = Query(None),
     ):
-        """Run the existing backtester (baseline strategy) on the stored data. Results are cached."""
+        """Run the existing backtester on the stored data. Results are cached."""
         start_ts = None if start is None else pd.Timestamp(start)
         end_ts = None if end is None else pd.Timestamp(end)
         if years is not None:
             if start or end:
                 raise HTTPException(422, "Use either years or start/end, not both")
             start_ts = svc.market_data()["date"].max() - pd.DateOffset(years=years)
-        settings = dash.BacktestSettings(initial_capital, transaction_cost, max_position_weight, start_ts, end_ts)
+        settings = dash.BacktestSettings(initial_capital, transaction_cost, max_position_weight, start_ts, end_ts,
+                                         strategy, min_position_weight)
         try:
             result, data = svc.backtest(settings)
+            comparison = None
+            if strategy == dash.SMART_MONEY:
+                baseline, _ = svc.backtest(replace(settings, strategy=dash.BASELINE))
+                comparison = [_comparison_row(dash.BASELINE, baseline), _comparison_row(dash.SMART_MONEY, result)]
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
-        return _backtest_response(result, data, settings)
+        return {**_backtest_response(result, data, settings), "comparison": comparison}
 
     @app.get("/api/refresh", response_model=s.RefreshStatus, tags=["refresh"])
     def refresh_status():
@@ -162,6 +187,19 @@ def create_app(service: AltrixService | None = None, warm: bool = True) -> FastA
     return app
 
 
+def _strategy_choice(key: str) -> dict:
+    return {"key": key, "name": dash.STRATEGIES[key][0]}
+
+
+def _comparison_row(key: str, result) -> dict:
+    m = result.metrics
+    return {
+        "strategy": _strategy_choice(key),
+        **{k: num(m[k]) for k in ("total_return", "cagr", "max_drawdown", "profit_factor", "win_rate", "expectancy")},
+        "completed_trades": int(m["completed_trades"]),
+    }
+
+
 def _backtest_response(result, data: pd.DataFrame, settings: dash.BacktestSettings) -> dict:
     curve = result.equity_curve
     trades = result.trades_frame()
@@ -171,9 +209,11 @@ def _backtest_response(result, data: pd.DataFrame, settings: dash.BacktestSettin
             "initial_capital": settings.initial_capital,
             "transaction_cost": settings.transaction_cost,
             "max_position_weight": settings.max_position_weight,
+            "min_position_weight": settings.min_position_weight,
             "start": iso_date(settings.start),
             "end": iso_date(settings.end),
         },
+        "strategy": _strategy_choice(settings.strategy),
         "data_start": iso_date(data["date"].min()),
         "data_end": iso_date(data["date"].max()),
         "symbols": int(data["symbol"].nunique()),

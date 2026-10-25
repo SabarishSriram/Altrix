@@ -138,11 +138,67 @@ def test_several_stocks_held_at_once():
 
 def test_same_day_buys_share_one_portfolio():
     stocks = [market(s, opens=[100] * 4, buys=[0]) for s in ("A", "B", "C")]
-    r = bt(*stocks, max_position_weight=1.0, transaction_cost=0.0)
-    # Each gets a third of 100k, not 100k each.
-    assert [e.quantity for e in r.executions] == [333, 333, 333]
-    assert r.equity_curve["cash"].iloc[-1] == pytest.approx(100)
+    r = bt(*stocks, max_position_weight=0.4, transaction_cost=0.0)
+    # Filled one after another from the same cash: 40k, 40k, then the 20k left (still >= 5% of equity).
+    assert [(e.symbol, e.quantity) for e in r.executions] == [("A", 400), ("B", 400), ("C", 200)]
+    assert r.equity_curve["cash"].iloc[-1] == pytest.approx(0)
     assert r.equity_curve["cash"].min() >= 0
+
+
+def momentum(symbol, start, end, buy_at=21, n=25, jump_on_fill=None) -> pd.DataFrame:
+    """Closes rising linearly from `start` (row 0) to `end` (row buy_at), flat after; BUY at `buy_at`.
+
+    roc20 at the signal = end / close[buy_at - 20] - 1. Opens equal closes.
+    """
+    closes = list(np.linspace(start, end, buy_at + 1)) + [end] * (n - buy_at - 1)
+    if jump_on_fill is not None:  # the fill day's close changes; roc20 must not see it
+        closes[buy_at + 1] = jump_on_fill
+    return market(symbol, opens=closes, closes=closes, buys=[buy_at], dates=pd.bdate_range("2024-01-01", periods=n))
+
+
+def test_same_day_buys_ranked_by_20_day_rate_of_change():
+    low, high, mid = momentum("A", 100, 105), momentum("B", 100, 130), momentum("C", 100, 115)
+    r = bt(low, high, mid, max_position_weight=0.5, transaction_cost=0.0)
+    # Only two 50% positions fit: strongest momentum first (B, then C), not alphabetical (A, B).
+    assert [e.symbol for e in r.executions] == ["B", "C"]
+    status = dict(zip(r.signals["symbol"], r.signals["status"]))
+    assert status == {"A": "below_min_position", "B": "executed", "C": "executed"}
+
+
+def test_ranking_uses_only_the_signal_days_close():
+    # At the signal close A has the higher roc20; B's close jumps on the fill day, which must not count.
+    a = momentum("A", 100, 120)
+    b = momentum("B", 100, 110, jump_on_fill=200)
+    r = bt(a, b, max_position_weight=1.0, transaction_cost=0.0)
+    assert [e.symbol for e in r.executions] == ["A"]
+
+
+def test_missing_roc_ranks_last_then_symbol_order():
+    short = market("A", opens=[100] * 25, buys=[21], dates=pd.bdate_range("2024-01-01", periods=25))
+    short.loc[:5, "open"] = short.loc[:5, "close"] = np.nan  # no close 20 rows before the signal
+    ranked = momentum("Z", 100, 101)  # +1%: weak, but known
+    r = bt(short, ranked, max_position_weight=1.0, transaction_cost=0.0)
+    assert [e.symbol for e in r.executions] == ["Z"]
+
+
+def test_cash_dust_buy_is_skipped():
+    a = market("A", opens=[100] * 6, buys=[0])
+    b = market("B", opens=[100] * 6, buys=[2])
+    r = bt(a, b, max_position_weight=0.97, transaction_cost=0.0)
+    # After A, 3k is left: below 5% of ~100k equity, so B is not bought for a token amount.
+    assert [e.symbol for e in r.executions] == ["A"]
+    assert r.signals.set_index("symbol").loc["B", "status"] == "below_min_position"
+
+    old_rule = bt(a, b, max_position_weight=0.97, transaction_cost=0.0, min_position_weight=0.0)
+    assert [(e.symbol, e.quantity) for e in old_rule.executions] == [("A", 970), ("B", 30)]
+
+
+def test_min_position_weight_must_fit_under_max():
+    df = market("A", opens=[100] * 4, buys=[0])
+    with pytest.raises(ValueError, match="min_position_weight"):
+        bt(df, max_position_weight=0.04)  # default minimum is 5%
+    with pytest.raises(ValueError, match="min_position_weight"):
+        bt(df, min_position_weight=-0.01)
 
 
 def test_later_buy_limited_by_remaining_cash():

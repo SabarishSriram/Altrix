@@ -14,23 +14,28 @@ row, never at T's close. Signals are read only after the day is fully
 processed, and orders only ever see the open of the day they fill on; no
 step reads a price from a day the simulation has not reached yet.
 
-Position sizing (V1, deterministic):
-    budget per BUY = min(max_position_weight * equity at previous close,
-                         cash after today's SELLs / number of BUYs filling today)
-    quantity       = floor(budget / (open * (1 + transaction_cost)))   # whole shares
+Position sizing (deterministic):
+    BUYs filling on the same day are ranked by their 20-day rate of change at
+    the signal close (roc20 = close / close 20 rows earlier - 1), highest first;
+    ties and stocks without 20 rows of history come last, in symbol order. In
+    that order each BUY gets
+        budget   = min(max_position_weight * equity at previous close, cash left)
+        quantity = floor(budget / (open * (1 + transaction_cost)))   # whole shares
+    and is skipped if budget < min_position_weight * equity at previous close,
+    so a nearly empty cash balance never buys a token position ("cash dust").
 Transaction costs come out of the budget, so cash never goes negative. Unspent
-money stays as cash. BUYs on the same day share cash equally; ties are processed
-in symbol order.
+money stays as cash. roc20 uses only closes up to the signal day.
 
 Ignored signals (recorded in `result.signals` with a reason, never traded):
     BUY for a stock already held, SELL for a stock not held, no next trading
-    day (signal on a stock's last row), missing/zero/negative open, or a budget
-    too small for one share.
+    day (signal on a stock's last row), missing/zero/negative open, a budget
+    below the minimum position size, or a budget too small for one share.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import pandas as pd
@@ -49,6 +54,9 @@ IGNORED_NOT_HELD = "ignored_not_held"
 NO_NEXT_DAY = "no_next_day"
 INVALID_OPEN = "invalid_open"
 INSUFFICIENT_CASH = "insufficient_cash"
+BELOW_MIN_POSITION = "below_min_position"
+
+ROC_WINDOW = 20  # rows for the BUY ranking's rate of change
 
 
 @dataclass
@@ -57,6 +65,13 @@ class _Order:
     symbol: str
     side: str  # "BUY" | "SELL"
     signal_date: pd.Timestamp
+    roc20: float = math.nan  # BUY priority, from the signal day's close
+
+
+def _priority(order: _Order) -> tuple:
+    """Highest roc20 first, NaN (or inf) last, then symbol: never depends on input order."""
+    missing = not math.isfinite(order.roc20)
+    return (missing, 0.0 if missing else -order.roc20, order.symbol)
 
 
 def run_backtest(
@@ -67,8 +82,10 @@ def run_backtest(
     benchmark: pd.Series | None = None,
     start: str | pd.Timestamp | None = None,
     end: str | pd.Timestamp | None = None,
+    min_position_weight: float = 0.05,
+    strategy: Callable[[pd.DataFrame], pd.DataFrame] = generate_baseline_signals,
 ) -> BacktestResult:
-    """Backtest the SMA20/SMA50 baseline strategy on daily OHLCV data.
+    """Backtest a strategy (default: the SMA20/SMA50 baseline) on daily OHLCV data.
 
     Args:
         df: Daily bars (at least date, symbol, open, close) for one or more
@@ -83,6 +100,11 @@ def run_backtest(
             same as in a full-history run. The portfolio starts in cash.
         end: Last trading date (inclusive). Data after it is removed before the
             strategy runs, so nothing after `end` can influence the result.
+        min_position_weight: A BUY whose budget is below this fraction of
+            equity is skipped (see the module docstring).
+        strategy: Bars in, bars out with boolean `buy_signal` / `sell_signal`:
+            `generate_baseline_signals` or
+            `src.strategy.smart_money.generate_smart_money_signals`.
 
     Raises:
         ValueError: if `start` is after `end`, or no data falls in the range.
@@ -95,7 +117,7 @@ def run_backtest(
     dates = pd.to_datetime(df["date"]) if "date" in df.columns else None
     if end is not None and dates is not None:
         df = df[dates <= end]
-    signals = generate_baseline_signals(df)
+    signals = strategy(df)
     if start is not None:
         signals = signals[signals["date"] >= start].reset_index(drop=True)
     if signals.empty:
@@ -107,6 +129,7 @@ def run_backtest(
         transaction_cost=transaction_cost,
         max_position_weight=max_position_weight,
         benchmark=benchmark,
+        min_position_weight=min_position_weight,
     )
 
 
@@ -116,6 +139,7 @@ def run_backtest_on_signals(
     transaction_cost: float = 0.001,
     max_position_weight: float = 0.10,
     benchmark: pd.Series | None = None,
+    min_position_weight: float = 0.05,
 ) -> BacktestResult:
     """Backtest any strategy that provides boolean `buy_signal` / `sell_signal` columns.
 
@@ -123,7 +147,7 @@ def run_backtest_on_signals(
     at the open of the same symbol's next row. See the module docstring for
     the full daily timeline and sizing rule.
     """
-    config = BacktestConfig(initial_capital, transaction_cost, max_position_weight)
+    config = BacktestConfig(initial_capital, transaction_cost, max_position_weight, min_position_weight)
     data = _prepare(df)
     tc = config.transaction_cost
 
@@ -173,7 +197,7 @@ def run_backtest_on_signals(
             trades.append(_close_trade(pos, day, day_index, price, cost))
             resolve(order, EXECUTED, day, price, pos.quantity)
 
-        # 1b. BUYs, sharing cash equally.
+        # 1b. BUYs, strongest 20-day momentum first, each limited by the cash left.
         eligible = []
         for order in buys:
             if order.symbol in positions:
@@ -184,10 +208,14 @@ def run_backtest_on_signals(
                 eligible.append(order)
 
         if eligible:
-            # Fixed before any of today's BUYs, so order of processing doesn't matter.
-            budget = min(config.max_position_weight * prev_equity, cash / len(eligible))
-            for order in eligible:
+            max_budget = config.max_position_weight * prev_equity
+            min_budget = config.min_position_weight * prev_equity
+            for order in sorted(eligible, key=_priority):
                 price = opens[order.symbol]
+                budget = min(max_budget, cash)
+                if budget < min_budget:
+                    resolve(order, BELOW_MIN_POSITION, day, price)
+                    continue
                 qty = math.floor(budget / (price * (1 + tc)))  # whole shares only
                 if qty < 1:
                     resolve(order, INSUFFICIENT_CASH, day, price)
@@ -214,13 +242,14 @@ def run_backtest_on_signals(
                       "total_equity": prev_equity, "positions": len(positions)})
 
         # ---- 3. CLOSE: today's signals become orders for the next trading day --
-        for sym, buy, sell in zip(today["symbol"], today["buy_signal"], today["sell_signal"]):
+        for sym, buy, sell, roc in zip(today["symbol"], today["buy_signal"], today["sell_signal"],
+                                       today["roc20"]):
             if buy or sell:
                 side = "BUY" if buy else "SELL"
                 signal_log.append({"signal_date": day, "symbol": sym, "side": side,
                                    "status": None, "execution_date": None,
                                    "execution_price": None, "quantity": None})
-                pending[sym] = _Order(len(signal_log) - 1, sym, side, day)
+                pending[sym] = _Order(len(signal_log) - 1, sym, side, day, float(roc))
 
     for order in pending.values():  # signals on a stock's last available row
         resolve(order, NO_NEXT_DAY)
@@ -275,6 +304,11 @@ def _prepare(df: pd.DataFrame) -> pd.DataFrame:
         row = data.loc[both].iloc[0]
         raise ValueError(f"backtest: BUY and SELL on the same row, e.g. {row['symbol']} "
                          f"{row['date'].date()}")
+
+    # BUY ranking: each stock's own rows, looking back only (shift(20) is 20 rows earlier).
+    data = data.sort_values(["symbol", "date"], kind="stable")
+    close = data["close"].astype("float64")
+    data["roc20"] = close / close.groupby(data["symbol"], sort=False).shift(ROC_WINDOW) - 1
     return data.sort_values(["date", "symbol"], kind="stable").reset_index(drop=True)
 
 

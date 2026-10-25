@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -280,3 +281,68 @@ def test_download_disabled_on_read_only_deployment(world, monkeypatch):
 def test_cors_allows_local_frontend(client):
     r = client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+# ---- /api/smart-money and strategy comparison ----------------------------------------
+
+def test_smart_money_scanner(client):
+    r = client.get("/api/smart-money")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["data_as_of"] == "2026-08-24" and body["universe"] == "NIFTY 100"
+    assert body["deliverables_available"] is False and body["deliverables_as_of"] is None
+    assert body["rules"]["accumulation_spike"] == 2.0 and body["rules"]["memory_days"] == 10
+    stocks = body["stocks"]
+    assert len(stocks) == 5
+    spikes = [s["vol_spike_ratio"] for s in stocks if s["vol_spike_ratio"] is not None]
+    assert spikes == sorted(spikes, reverse=True)  # ranked by volume spike
+    rows = {s["symbol"]: s for s in stocks}
+    assert rows["BUYCO.NS"]["pocket_pivot"] is True and rows["BUYCO.NS"]["trend"] == "UPTREND"
+    assert rows["NEWCO.NS"]["trend"] == "INSUFFICIENT_DATA"
+    assert body["pocket_pivot_count"] == sum(s["pocket_pivot"] for s in stocks)
+    assert {"close", "return_1d_pct", "clv", "deliv_spike_ratio", "delivery_spike"} <= set(stocks[0])
+
+
+def test_smart_money_uses_stored_deliverables(world):
+    from src.data.deliverables import DeliverableStore
+
+    processed, _ = world
+    dates = pd.bdate_range(end="2026-08-24", periods=21)
+    DeliverableStore(processed.parent / "deliverables").append(pd.DataFrame({
+        "date": dates, "symbol": "BUYCO.NS", "deliv_qty": [100.0] * 20 + [600.0], "deliv_per": [40.0] * 20 + [80.0]}))
+    c = TestClient(create_app(AltrixService(data_dir=processed), warm=False))
+    body = c.get("/api/smart-money").json()
+    assert body["deliverables_available"] is True and body["deliverables_as_of"] == "2026-08-24"
+    row = {s["symbol"]: s for s in body["stocks"]}["BUYCO.NS"]
+    assert row["deliv_per"] == 80 and row["delivery_spike"] is True
+    assert body["delivery_spike_count"] == 1
+
+
+def test_backtest_smart_money_strategy_with_comparison(client):
+    base = client.get("/api/backtest").json()
+    assert base["strategy"]["key"] == "baseline" and base["comparison"] is None
+    assert base["config"]["min_position_weight"] == 0.05
+    assert {"profit_factor", "expectancy"} <= set(base["metrics"])
+
+    r = client.get("/api/backtest?strategy=smart_money")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["strategy"]["key"] == "smart_money"
+    rows = {row["strategy"]["key"]: row for row in body["comparison"]}
+    assert set(rows) == {"baseline", "smart_money"}
+    assert rows["baseline"]["completed_trades"] == base["metrics"]["completed_trades"]
+    assert rows["smart_money"]["completed_trades"] == body["metrics"]["completed_trades"]
+    for row in rows.values():
+        assert {"cagr", "max_drawdown", "profit_factor", "win_rate", "expectancy", "total_return"} <= set(row)
+
+
+def test_backtest_rejects_unknown_strategy_and_min_above_max(client):
+    assert client.get("/api/backtest?strategy=magic").status_code == 422
+    r = client.get("/api/backtest?max_position_weight=0.03")  # below the 5% minimum position
+    assert r.status_code == 422 and "Minimum position" in r.json()["detail"]
+
+
+def test_meta_lists_strategies(client):
+    body = client.get("/api/meta").json()
+    assert [s["key"] for s in body["strategies"]] == ["baseline", "smart_money"]
+    assert body["backtest_defaults"]["min_position_weight"] == 0.05

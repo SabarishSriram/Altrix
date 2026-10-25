@@ -195,6 +195,7 @@ Failed:                 1
 | Suspicious missing trading day          | warning  |
 | Bar on a non-trading day (placeholder)  | warning  |
 | Zero volume on a trading day            | warning  |
+| One-day close drop of 35% or more       | warning  |
 
 **Holidays vs. suspicious gaps.** No free, official NSE holiday API exists, so the trading
 calendar is inferred from the data. A date counts as a trading day if at least half of the stocks
@@ -205,6 +206,13 @@ listed at the time traded on it (volume > 0). This means:
 - A trading day missing for one stock, inside that stock's own listed period, is flagged as
   **suspicious**.
 - Missing days are **never** filled with synthetic OHLCV values.
+
+**Possible corporate actions.** A one-day close-to-close fall of 35% or more is flagged
+(`report.corporate_action_suspects`, `large_price_drops()`), because Yahoo often leaves demergers unadjusted
+for a while. On the current data it flags `VEDL.NS` 2026-04-30 (−64.9%), `TMPV.NS` 2025-10-14 (−40.2%) and
+`IDEA.NS` 2020-03-18 (−35.1%, a real crash). The flag asks you to verify the price history; nothing is
+adjusted or removed, so the backtester still trades through these days. For example, the baseline buys VEDL on
+2026-04-17 and sells it on 2026-05-06 at −60.5%, a loss that the demerger, not the market, created.
 
 ## Loading clean data
 
@@ -268,9 +276,15 @@ downloads anything. Results go to `data/results/baseline_sma/`:
   morning). Positions are then marked to market at the close, which gives one equity-curve row.
 - **Long-only.** One position per stock, always sold in full. No shorting, leverage or
   fractional shares.
-- **Sizing.** Each BUY gets `min(max_position_weight × equity at previous close, cash ÷ BUYs
-  filling today)`. Quantity is `floor(budget / (open × (1 + cost)))`, so fees fit inside the
-  budget and cash never goes negative.
+- **Sizing.** BUYs filling on the same day are ranked by their **20-day rate of change** at the signal close
+  (`close / close 20 rows earlier − 1`, highest first; stocks without 20 rows of history last, then by symbol),
+  so the order never depends on file or alphabetical order. In that order each BUY gets
+  `min(max_position_weight × equity at previous close, cash left)`. Quantity is
+  `floor(budget / (open × (1 + cost)))`, so fees fit inside the budget and cash never goes negative.
+- **Minimum position.** A BUY is skipped unless its budget is at least `min_position_weight` (default 5%) of
+  equity, so a nearly empty cash balance never buys a ₹1,000 "cash dust" position. The old rule split cash
+  equally and made 500 such sub-₹5,000 BUYs over 10 years; pass `min_position_weight=0` to allow small
+  budgets again.
 - **Costs.** A flat `transaction_cost` (default 0.1%) on every BUY and SELL. No STT, GST,
   stamp duty or slippage yet.
 - **Ignored signals** are recorded with a reason in `signals.csv`:
@@ -278,12 +292,56 @@ downloads anything. Results go to `data/results/baseline_sma/`:
   - `ignored_not_held`: SELL for a stock not held
   - `no_next_day`: signal on a stock's last row
   - `invalid_open`: missing, zero or negative open price
+  - `below_min_position`: budget below `min_position_weight` of equity
   - `insufficient_cash`: budget too small for one share
 - **Benchmark.** `run_backtest(..., benchmark=series)` adds a buy-and-hold comparison if you
   pass in a price series. None is downloaded.
 
 **Survivorship bias.** The universe is *today's* NIFTY 100, so results are inflated: stocks
 that fell out of the index since 2016 are missing.
+
+## Smart Money (institutional footprint)
+
+`src/strategy/smart_money.py` reads institutional footprints from the stored daily OHLCV. Per stock, per day
+(every window looks backwards; rows are the stock's own trading days):
+
+| Column | Rule |
+|---|---|
+| `vol_spike_ratio` | `volume / volume.rolling(20).mean()` (today included) |
+| `clv` | close location value `(close - low) / (high - low)`: 1 = closed at the high; empty when high = low |
+| `pocket_pivot` | up close, **and** volume above every down-day volume of the prior 10 trading days (0 if there were none), **and** `close >= 0.95 × SMA50` |
+| `institutional_accumulation` | up close, `vol_spike_ratio >= 2.0` and `clv >= 0.5` |
+| `smart_money_active_10d` | a pocket pivot or accumulation on any of the last 10 trading days (today included) |
+
+**Smart-money filtered SMA 20/50** (`generate_smart_money_signals`): the baseline SELL rule, but a BUY needs
+either an SMA20 ↑ SMA50 crossover **with** `smart_money_active_10d`, or a fresh pocket pivot that closes within
+5% of SMA20 while SMA20 was already above SMA50 (yesterday and today). The unfiltered crossover stays available
+as `baseline_buy_signal`.
+
+**Optional NSE delivery data.** `python scripts/download_deliverables.py` (default: last 45 days, only days not
+stored yet) downloads NSE's daily `sec_bhavdata_full_DDMMYYYY.csv`, keeps `SERIES == "EQ"` rows for the NIFTY
+100, and stores `DELIV_QTY` / `DELIV_PER` in `data/deliverables/deliverables.parquet`
+(`src/data/deliverables.py`). `deliv_spike_ratio = DELIV_QTY / DELIV_QTY.rolling(20).mean()`, flagged as a
+delivery spike when it is `>= 2.0` and `DELIV_PER >= 55`. Weekends are skipped; holidays return no file (or the
+previous session's file, which is ignored). Nothing else depends on this data: without it, delivery columns are
+simply empty. The deployed API gets it when the daily workflow can reach NSE.
+
+**Scanner.** `src/scanner/smart_money_scan.py` takes each stock's latest bar, ranked by `vol_spike_ratio`. A stock
+with no bar on the scan date keeps a note and no footprint values, so a stale spike is never ranked as today's.
+
+**Comparison.** With the same settings over the last 10 years of stored data (to 16 Oct 2026):
+
+| | Baseline SMA 20/50 | Smart-Money filtered |
+|---|---|---|
+| CAGR | 14.2% | 19.2% |
+| Max drawdown | −32.1% | −29.4% |
+| Profit factor | 1.73 | 2.00 |
+| Win rate | 40.0% | 46.2% |
+| Expectancy (net P&L per trade) | ₹624 | ₹995 |
+| Completed trades | 433 | 461 |
+
+The rules and thresholds were fixed in advance, not tuned, but this is still one in-sample run on a
+survivorship-biased universe: treat it as a reason to research further, not as evidence of an edge.
 
 ## The Altrix app (Opportunity Scanner + Backtest)
 
@@ -423,6 +481,7 @@ data changes, so later requests are fast.
 | `ALTRIX_DATA_DIR` | API | `data/processed` | processed Parquet folder |
 | `ALTRIX_RAW_DIR` | API | `data/raw` | constituent snapshot folder |
 | `ALTRIX_OFFLINE` | API | unset | `1` = read the constituent list only from the local snapshot |
+| `ALTRIX_DELIVERABLES_DIR` | API | `data/deliverables` | optional NSE deliverables folder |
 | `ALTRIX_DISABLE_DOWNLOAD` | API | unset | `1` = reject `POST /api/refresh?download=true` with 403 and hide *Download new bars* in the web app (read-only deployments) |
 
 ### Endpoints
@@ -434,7 +493,8 @@ data changes, so later requests are fast.
 | GET | `/api/scanner` | latest-day BUY/SELL/HOLD for every constituent, with counts and failed symbols |
 | GET | `/api/scanner/{symbol}/history?start=&end=` | daily bars with SMA20, SMA50 and the strategy's historical crossovers |
 | GET | `/api/signals/recent?days=30` | past crossovers and per-day BUY/SELL counts (context only) |
-| GET | `/api/backtest?initial_capital=&transaction_cost=&max_position_weight=&years=` (or `start=&end=`) | runs `run_backtest`; `years` looks back from the latest stored date: metrics, equity curve, trades, open positions |
+| GET | `/api/smart-money` | latest-day footprint for every constituent, ranked by `vol_spike_ratio`, with NSE delivery columns when stored |
+| GET | `/api/backtest?initial_capital=&transaction_cost=&max_position_weight=&min_position_weight=&strategy=&years=` (or `start=&end=`) | runs `run_backtest`; `years` looks back from the latest stored date: metrics (incl. profit factor, expectancy), equity curve, trades, open positions. `strategy=smart_money` also returns `comparison` with the baseline |
 | POST | `/api/refresh` | rescan the stored data now |
 | POST | `/api/refresh?download=true` | start the incremental downloader in the background (202, 409 if one is running, 403 if `ALTRIX_DISABLE_DOWNLOAD=1`) |
 | GET | `/api/refresh` | status of the latest rescan or download |
@@ -453,14 +513,19 @@ returns are fractions (0.05 = +5%), as in the backtester.
   clicking a row opens a preview panel; the chart icon opens the full analysis.
 - **Stock Analysis:** stock picker, plus a detail page with an interactive close/SMA20/SMA50 chart
   (1M/3M/6M/1Y/ALL, volume pane, BUY/SELL markers from the strategy), crossovers per year and full signal history.
+- **Smart Money:** footprint counts, All / Pocket pivots / Accumulation / Active-in-10-days tabs, and a sortable table
+  ranked by volume spike: close, 1D %, volume spike, CLV, pocket pivot, accumulation, 10-day memory, SMA 20/50
+  trend, and delivery spike / delivered % when NSE delivery data is stored.
 - **Backtesting:** runs the existing backtester over the last 1, 2, 3, 5 or 10 years: metrics, equity curve, drawdown, trades,
-  open positions.
+  open positions. *Require 10-Day Smart Money Confirmation for SMA 20/50 Entry* runs the filtered strategy and adds a
+  side-by-side comparison (CAGR, max drawdown, profit factor, win rate, expectancy, trade count) with the baseline.
 - **Settings:** read-only view of the configuration that exists (API URL, data source, strategy rules,
   backtest defaults).
 - **Refresh** (top bar): *Rescan stored data*, or *Download new bars* (the same incremental downloader as
   `scripts/download_data.py`, then a rescan). Nothing downloads automatically.
 
-The Streamlit app (`streamlit run app/streamlit_app.py`) still works and is unchanged.
+The Streamlit app (`streamlit run app/streamlit_app.py`) still works. It uses the same backtester (so the new sizing
+rules apply) but has no Smart Money page.
 
 ## Deployment (Vercel, free tier)
 
@@ -475,7 +540,7 @@ Vercel Functions have no persistent disk and stop between requests, so the deplo
 `ALTRIX_OFFLINE=1` and `ALTRIX_DISABLE_DOWNLOAD=1` are set by `server/deploy/vercel-api/index.py`, and *Download new
 bars* is hidden. Fresh data comes from `.github/workflows/deploy-api.yml` instead. On weekdays at 18:00 IST it
 restores the stored Parquet files from the Actions cache, runs the tests, runs `scripts/download_data.py`
-(new bars only), stages the API with `scripts/stage_api_deploy.py` and deploys it. It also runs on pushes to
+(new bars only) and, best effort, `scripts/download_deliverables.py`, stages the API with `scripts/stage_api_deploy.py` and deploys it. It also runs on pushes to
 `main` that touch the API under `server/`, and from the Actions tab (*Run workflow*). The first run downloads the full 10 years.
 
 `scripts/stage_api_deploy.py OUT_DIR` copies only what the API needs (`api/`, `src/`, two `app/` modules, the
@@ -526,18 +591,23 @@ server/
     universe.py     UniverseProvider interface + Nifty100Universe (NSE CSV, cached fallback)
     provider.py     MarketDataProvider interface + YahooFinanceProvider, normalized SCHEMA
     downloader.py   ParquetStore, incremental update_symbol / download_all, validate_all
-    validator.py    validate(), build_trading_calendar(), ValidationReport
+    validator.py    validate(), build_trading_calendar(), large_price_drops(), ValidationReport
+    deliverables.py optional NSE sec_bhavdata_full parser/downloader, DeliverableStore, delivery spikes
     cleaner.py      clean(), load_clean(): tidy frames for downstream use, gaps reported
     target.py       add_medium_term_target(): future_max_return_60d + binary target (label only, never a feature)
   src/strategy/
     baseline.py     generate_baseline_signals(): SMA20/SMA50 crossover BUY/SELL signals (signal on day t,
                     executed at the stock's next trading day's open by the backtester)
+    smart_money.py  add_smart_money_footprint(), generate_smart_money_signals(): volume spike, CLV,
+                    pocket pivots, accumulation, 10-day memory, smart-money filtered SMA 20/50
   src/backtest/
     models.py       BacktestConfig, Position, Execution, Trade, BacktestResult
-    engine.py       run_backtest() (baseline strategy) / run_backtest_on_signals() (any strategy)
-    metrics.py      compute_metrics(), max_drawdown(), drawdown_series(), cagr()
+    engine.py       run_backtest(strategy=...) / run_backtest_on_signals() (any signals); ROC20 BUY ranking,
+                    minimum position size
+    metrics.py      compute_metrics() (incl. profit factor, expectancy), max_drawdown(), drawdown_series(), cagr()
   src/scanner/
     opportunity_scanner.py  run_universe_scan(), scan_current_opportunities(): latest-day BUY/SELL/HOLD
+    smart_money_scan.py     scan_smart_money(): latest-day footprint ranked by volume spike
   app/
     streamlit_app.py   entry point: page navigation (Opportunity Scanner, Backtest)
     views/scanner.py   Opportunity Scanner page (layout, widgets, caching; no logic)
@@ -551,10 +621,11 @@ server/
   scripts/
     download_data.py   download / update data
     run_backtest.py    backtest the baseline strategy, save results to data/results/
+    download_deliverables.py  optional NSE deliverable volume (sec_bhavdata_full)
     stage_api_deploy.py  assemble the API + data folder that is deployed to Vercel
   deploy/vercel-api/   Vercel entrypoint (index.py), pinned runtime requirements, Python version, vercel.json
   tests/               offline pytest suite (fake providers, synthetic data, headless AppTest)
-  data/                raw/ constituent snapshot, processed/ Parquet files (downloaded, not committed)
+  data/                raw/ constituent snapshot, processed/ Parquet files, deliverables/ (downloaded, not committed)
 client/                Next.js frontend (App Router, Tailwind, shadcn/ui, lightweight-charts, Recharts)
 .github/workflows/
   deploy-api.yml       weekday data update + API deploy to Vercel

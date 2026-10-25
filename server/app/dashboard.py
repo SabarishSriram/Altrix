@@ -17,9 +17,17 @@ import plotly.graph_objects as go
 
 from src.backtest import BacktestResult, run_backtest
 from src.data import ParquetStore, load_clean
+from src.strategy import generate_baseline_signals, generate_smart_money_signals
 
 ROOT = Path(__file__).resolve().parents[1]
 STRATEGY_NAME = "20 / 50 SMA Crossover"
+BASELINE = "baseline"
+SMART_MONEY = "smart_money"
+# key -> (display name, signal generator); the generators live in src/strategy.
+STRATEGIES = {
+    BASELINE: (STRATEGY_NAME, generate_baseline_signals),
+    SMART_MONEY: ("20 / 50 SMA + 10-Day Smart Money Confirmation", generate_smart_money_signals),
+}
 
 # Muted palette: one accent per meaning, nothing decorative.
 EQUITY_COLOR = "#2563eb"
@@ -100,6 +108,8 @@ class BacktestSettings:
     max_position_weight: float = 0.10
     start: pd.Timestamp | None = None
     end: pd.Timestamp | None = None
+    strategy: str = BASELINE
+    min_position_weight: float = 0.05
 
     def errors(self) -> list[str]:
         """Human-readable problems with the settings (empty if valid)."""
@@ -110,6 +120,10 @@ class BacktestSettings:
             problems.append("Transaction cost must be between 0% and 100%.")
         if not 0 < self.max_position_weight <= 1:
             problems.append("Maximum position weight must be above 0% and at most 100%.")
+        if not 0 <= self.min_position_weight <= self.max_position_weight:
+            problems.append("Minimum position size must be between 0% and the maximum position weight.")
+        if self.strategy not in STRATEGIES:
+            problems.append(f"Unknown strategy {self.strategy!r}; choose one of {', '.join(STRATEGIES)}.")
         if self.start is not None and self.end is not None and self.start > self.end:
             problems.append(f"Start date {self.start.date()} is after end date {self.end.date()}.")
         return problems
@@ -127,6 +141,8 @@ def run_dashboard_backtest(df: pd.DataFrame, settings: BacktestSettings) -> Back
         max_position_weight=settings.max_position_weight,
         start=settings.start,
         end=settings.end,
+        min_position_weight=settings.min_position_weight,
+        strategy=STRATEGIES[settings.strategy][1],
     )
 
 
