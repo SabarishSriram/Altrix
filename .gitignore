@@ -1,19 +1,9 @@
-# Python
+# Python (any depth: the venv can live at the repo root or in server/)
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
 venv/
-
-# Downloaded market data (re-creatable with scripts/download_data.py)
-data/raw/*
-data/processed/*
-data/results/
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-# Committed so CI and the Vercel API work when NSE blocks cloud IPs (refreshed by download_data.py)
-!data/raw/nifty100_constituents.csv
-*.parquet.tmp
 
 # Editors / OS
 .vscode/

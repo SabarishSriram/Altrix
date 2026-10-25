@@ -41,7 +41,7 @@ export function SettingsView() {
 
   return (
     <div className="flex max-w-4xl flex-col gap-5">
-      <Section title="API connection" description="Set in web/.env.local and read at build/start time.">
+      <Section title="API connection" description="Set in client/.env.local and read at build/start time.">
         <Row label="NEXT_PUBLIC_API_BASE_URL"><code className={code}>{API_BASE_URL}</code></Row>
         <Row label="Status">{health.error ? <span className="text-loss">Unreachable</span> : h ? `${h.status === "ok" ? "Online" : "Degraded"} · API v${h.version}` : <Skeleton className="h-4 w-32" />}</Row>
         <Row label="API documentation">
@@ -72,7 +72,7 @@ export function SettingsView() {
         </Row>
       </Section>
 
-      <Section title="Strategy" description="Defined in src/strategy/baseline.py. Not configurable from the UI.">
+      <Section title="Strategy" description="Defined in server/src/strategy/baseline.py. Not configurable from the UI.">
         <Row label="Name">{m?.strategy.name ?? <Skeleton className="h-4 w-40" />}</Row>
         <Row label="Windows">{m ? `SMA${m.strategy.short_window} / SMA${m.strategy.long_window} of daily closes` : <Skeleton className="h-4 w-40" />}</Row>
         <Row label="BUY">{m?.strategy.buy_rule ?? "—"}</Row>
@@ -93,7 +93,7 @@ export function SettingsView() {
       ) : (
         <Section title="Updating data" description="Nothing downloads automatically.">
           <Row label="From the app">Refresh → Download new bars (incremental, end-of-day only).</Row>
-          <Row label="From the command line"><code className={code}>python scripts/download_data.py</code></Row>
+          <Row label="From the command line"><code className={code}>python scripts/download_data.py</code> in <code className={code}>server/</code></Row>
         </Section>
       )}
     </div>

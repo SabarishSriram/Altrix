@@ -11,7 +11,8 @@ Streamlit, tests, the frontend and the dev requirements stay out, which keeps
 the Python bundle under Vercel's size limit.
 
 Reads ALTRIX_DATA_DIR / ALTRIX_RAW_DIR like the app. Never downloads anything:
-run scripts/download_data.py first. Used by .github/workflows/deploy-api.yml.
+run scripts/download_data.py first. Used by .github/workflows/deploy-api.yml at the
+repository root.
 """
 
 from __future__ import annotations

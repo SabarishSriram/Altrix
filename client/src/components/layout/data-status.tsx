@@ -13,7 +13,7 @@ function useStatus(): Status {
   if (health.error) return { label: "API offline", tone: "down", detail: health.error.message };
   if (!health.data) return { label: "Connecting…", tone: "pending", detail: "Checking the Altrix API." };
   if (!health.data.data_available) {
-    return { label: "No market data", tone: "down", detail: "Run python scripts/download_data.py to download it." };
+    return { label: "No market data", tone: "down", detail: "Run python scripts/download_data.py in server/ to download it." };
   }
   if (scanner.data?.is_stale) {
     return {

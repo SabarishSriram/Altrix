@@ -1,4 +1,4 @@
-// Response types for the Altrix API (api/schemas.py). Dates are "YYYY-MM-DD"
+// Response types for the Altrix API (server/api/schemas.py). Dates are "YYYY-MM-DD"
 // market dates; *_at fields are UTC timestamps of API activity, not market dates.
 
 export type Signal = "BUY" | "SELL" | "HOLD" | "INSUFFICIENT_DATA";

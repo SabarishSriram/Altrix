@@ -12,6 +12,18 @@ NIFTY 100 → market data → feature engineering → ML models → backtesting 
 constituents, downloads about 10 years of daily price history for each stock, normalizes it,
 validates it, and caches it locally as Parquet.
 
+## Repository layout
+
+```
+altrix/
+  server/    Python: data pipeline, strategy, backtester, scanner, FastAPI (api/), Streamlit (app/), tests
+  client/    Next.js web app that calls the API
+  .github/   GitHub Actions (daily data update + API deploy)
+```
+
+**Run every Python command from `server/`.** Python paths in this README (`scripts/...`, `src/...`,
+`data/processed/`) are relative to `server/`. Frontend commands run from `client/`.
+
 ---
 
 ## What is OHLCV?
@@ -66,7 +78,7 @@ Read this before you trust any backtest built on this data.
 Requires Python 3.11+. On Windows (PowerShell):
 
 ```powershell
-cd C:\Webdev\altrix
+cd C:\Webdev\altrix\server
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -76,7 +88,7 @@ pip install -r requirements.txt
 On macOS/Linux:
 
 ```bash
-cd altrix
+cd altrix/server
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -152,7 +164,7 @@ Failed:                 0
 New rows this run:      226,933
 Total rows:             226,933
 Date range:             2016-10-05 -> 2026-10-01
-Stored in:              C:\Webdev\altrix\data\processed
+Stored in:              C:\Webdev\altrix\server\data\processed
 ========================================================
 
 Validation: 85 clean, 15 with stock-specific warnings, 0 with errors
@@ -276,8 +288,8 @@ that fell out of the index since 2016 are missing.
 ## The Altrix app (Opportunity Scanner + Backtest)
 
 ```bash
-cd altrix
-.\.venv\Scripts\Activate.ps1               # Windows (source .venv/bin/activate on macOS/Linux)
+cd altrix/server
+.\.venv\Scripts\Activate.ps1        # Windows (source .venv/bin/activate on macOS/Linux)
 pip install -r requirements.txt            # includes streamlit and plotly
 python scripts/download_data.py            # once, if data/processed/ is empty
 streamlit run app/streamlit_app.py         # opens http://localhost:8501
@@ -373,7 +385,7 @@ To use a different data folder, set `ALTRIX_DATA_DIR=/path/to/processed`.
 A research terminal for the scanner and backtester:
 
 ```
-Next.js (web/, :3000)  ->  FastAPI (api/, :8000)  ->  src/ (universe, strategy, scanner, backtest)  ->  data/processed/*.parquet
+Next.js (client/, :3000)  ->  FastAPI (server/api/, :8000)  ->  server/src/ (universe, strategy, scanner, backtest)  ->  server/data/processed/*.parquet
 ```
 
 The frontend only calls the API. It never reads Parquet files or contacts Yahoo/NSE, and it contains no
@@ -384,19 +396,20 @@ strategy logic: every signal, SMA and metric comes from the Python modules.
 Requires Node.js 20+ and the Python setup above.
 
 ```powershell
-# Terminal 1: API (repository root)
+# Terminal 1: API
+cd server
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn api.main:app --reload --port 8000        # docs: http://localhost:8000/docs
 
 # Terminal 2: frontend
-cd web
+cd client
 npm install
 copy .env.example .env.local                      # cp on macOS/Linux
 npm run dev                                       # http://localhost:3000
 ```
 
-For a production build: `npm run build` then `npm start` in `web/`.
+For a production build: `npm run build` then `npm start` in `client/`.
 
 The API scans once in the background at startup (about 10-15 s) and caches the result until the stored
 data changes, so later requests are fast.
@@ -405,7 +418,7 @@ data changes, so later requests are fast.
 
 | Variable | Where | Default | Purpose |
 |---|---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `web/.env.local` | `http://localhost:8000` | API base URL used by the browser |
+| `NEXT_PUBLIC_API_BASE_URL` | `client/.env.local` | `http://localhost:8000` | API base URL used by the browser |
 | `ALTRIX_CORS_ORIGINS` | API | `http://localhost:3000,http://127.0.0.1:3000` | allowed frontend origins (comma-separated) |
 | `ALTRIX_DATA_DIR` | API | `data/processed` | processed Parquet folder |
 | `ALTRIX_RAW_DIR` | API | `data/raw` | constituent snapshot folder |
@@ -454,16 +467,16 @@ The Streamlit app (`streamlit run app/streamlit_app.py`) still works and is unch
 Both halves run on Vercel as two projects:
 
 ```
-altrix-web  (Next.js, web/, deployed from GitHub on every push)
+altrix-web  (Next.js, client/, deployed from GitHub on every push)
     -> altrix-api  (FastAPI as one Vercel Function, deployed by GitHub Actions with the data bundled in)
 ```
 
 Vercel Functions have no persistent disk and stop between requests, so the deployed API is **read-only**:
-`ALTRIX_OFFLINE=1` and `ALTRIX_DISABLE_DOWNLOAD=1` are set by `deploy/vercel-api/index.py`, and *Download new
+`ALTRIX_OFFLINE=1` and `ALTRIX_DISABLE_DOWNLOAD=1` are set by `server/deploy/vercel-api/index.py`, and *Download new
 bars* is hidden. Fresh data comes from `.github/workflows/deploy-api.yml` instead. On weekdays at 18:00 IST it
 restores the stored Parquet files from the Actions cache, runs the tests, runs `scripts/download_data.py`
 (new bars only), stages the API with `scripts/stage_api_deploy.py` and deploys it. It also runs on pushes to
-`main` that touch the API, and from the Actions tab (*Run workflow*). The first run downloads the full 10 years.
+`main` that touch the API under `server/`, and from the Actions tab (*Run workflow*). The first run downloads the full 10 years.
 
 `scripts/stage_api_deploy.py OUT_DIR` copies only what the API needs (`api/`, `src/`, two `app/` modules, the
 Parquet files, the constituent snapshot and `deploy/vercel-api/`) into `OUT_DIR`. The API's dependencies are
@@ -476,11 +489,12 @@ runs the tests on those exact versions with Python 3.12, the version Vercel uses
 2. Create the API project without deploying it. Stage once and link the folder:
 
    ```bash
-   python scripts/stage_api_deploy.py ../altrix-api-stage
-   npx vercel@63.1.2 link --cwd ../altrix-api-stage     # log in, create a new project named altrix-api
+   cd server
+   python scripts/stage_api_deploy.py ../../altrix-api-stage
+   npx vercel@63.1.2 link --cwd ../../altrix-api-stage     # log in, create a new project named altrix-api
    ```
 
-   `../altrix-api-stage/.vercel/project.json` now holds `orgId` and `projectId`. Do **not** connect this project
+   `altrix-api-stage/.vercel/project.json` (next to the repository folder) now holds `orgId` and `projectId`. Do **not** connect this project
    to the Git repository: a Git deployment would have no data. In the project's settings, add the environment
    variable `ALTRIX_CORS_ORIGINS=https://<your-web-project>.vercel.app`.
 3. Create a token at <https://vercel.com/account/tokens>. In GitHub, go to *Settings → Secrets and variables →
@@ -488,11 +502,11 @@ runs the tests on those exact versions with Python 3.12, the version Vercel uses
    exist, the workflow skips the deploy.
 4. Run *Deploy API* from the Actions tab. Check `https://<api-project>.vercel.app/health`: `stored_symbols`
    should be 100 and `downloads_enabled` false.
-5. In Vercel, import the GitHub repository as a second project: Root Directory `web`, environment variable
+5. In Vercel, import the GitHub repository as a second project: Root Directory `client`, environment variable
    `NEXT_PUBLIC_API_BASE_URL=https://<api-project>.vercel.app`. It is read at build time, so redeploy after
    changing it.
 
-The API runs in Mumbai (`bom1`, set in `deploy/vercel-api/vercel.json`).
+The API runs in Mumbai (`bom1`, set in `server/deploy/vercel-api/vercel.json`).
 
 ### Limitations
 
@@ -507,41 +521,43 @@ The API runs in Mumbai (`bom1`, set in `deploy/vercel-api/vercel.json`).
 ## Code layout
 
 ```
-src/data/
-  universe.py     UniverseProvider interface + Nifty100Universe (NSE CSV, cached fallback)
-  provider.py     MarketDataProvider interface + YahooFinanceProvider, normalized SCHEMA
-  downloader.py   ParquetStore, incremental update_symbol / download_all, validate_all
-  validator.py    validate(), build_trading_calendar(), ValidationReport
-  cleaner.py      clean(), load_clean(): tidy frames for downstream use, gaps reported
-  target.py       add_medium_term_target(): future_max_return_60d + binary target (label only, never a feature)
-src/strategy/
-  baseline.py     generate_baseline_signals(): SMA20/SMA50 crossover BUY/SELL signals (signal on day t,
-                  executed at the stock's next trading day's open by the backtester)
-src/backtest/
-  models.py       BacktestConfig, Position, Execution, Trade, BacktestResult
-  engine.py       run_backtest() (baseline strategy) / run_backtest_on_signals() (any strategy)
-  metrics.py      compute_metrics(), max_drawdown(), drawdown_series(), cagr()
-src/scanner/
-  opportunity_scanner.py  run_universe_scan(), scan_current_opportunities(): latest-day BUY/SELL/HOLD
-app/
-  streamlit_app.py   entry point: page navigation (Opportunity Scanner, Backtest)
-  views/scanner.py   Opportunity Scanner page (layout, widgets, caching; no logic)
-  views/backtest.py  Backtest page (layout, widgets, session state; no logic)
-  scanner_ui.py      universe loading, refresh, tables and chart for the scanner page
-  dashboard.py       turns a BacktestResult into tables, metric cards and Plotly figures
-api/
-  main.py            FastAPI app and endpoints (uvicorn api.main:app)
-  service.py         cached access to the scanner, strategy output, backtester and downloader
-  schemas.py         response models (OpenAPI docs at /docs)
-web/                 Next.js frontend (App Router, Tailwind, shadcn/ui, lightweight-charts, Recharts)
-scripts/
-  download_data.py   download / update data
-  run_backtest.py    backtest the baseline strategy, save results to data/results/
-  stage_api_deploy.py  assemble the API + data folder that is deployed to Vercel
-deploy/vercel-api/   Vercel entrypoint (index.py), pinned runtime requirements, Python version, vercel.json
+server/
+  src/data/
+    universe.py     UniverseProvider interface + Nifty100Universe (NSE CSV, cached fallback)
+    provider.py     MarketDataProvider interface + YahooFinanceProvider, normalized SCHEMA
+    downloader.py   ParquetStore, incremental update_symbol / download_all, validate_all
+    validator.py    validate(), build_trading_calendar(), ValidationReport
+    cleaner.py      clean(), load_clean(): tidy frames for downstream use, gaps reported
+    target.py       add_medium_term_target(): future_max_return_60d + binary target (label only, never a feature)
+  src/strategy/
+    baseline.py     generate_baseline_signals(): SMA20/SMA50 crossover BUY/SELL signals (signal on day t,
+                    executed at the stock's next trading day's open by the backtester)
+  src/backtest/
+    models.py       BacktestConfig, Position, Execution, Trade, BacktestResult
+    engine.py       run_backtest() (baseline strategy) / run_backtest_on_signals() (any strategy)
+    metrics.py      compute_metrics(), max_drawdown(), drawdown_series(), cagr()
+  src/scanner/
+    opportunity_scanner.py  run_universe_scan(), scan_current_opportunities(): latest-day BUY/SELL/HOLD
+  app/
+    streamlit_app.py   entry point: page navigation (Opportunity Scanner, Backtest)
+    views/scanner.py   Opportunity Scanner page (layout, widgets, caching; no logic)
+    views/backtest.py  Backtest page (layout, widgets, session state; no logic)
+    scanner_ui.py      universe loading, refresh, tables and chart for the scanner page
+    dashboard.py       turns a BacktestResult into tables, metric cards and Plotly figures
+  api/
+    main.py            FastAPI app and endpoints (uvicorn api.main:app)
+    service.py         cached access to the scanner, strategy output, backtester and downloader
+    schemas.py         response models (OpenAPI docs at /docs)
+  scripts/
+    download_data.py   download / update data
+    run_backtest.py    backtest the baseline strategy, save results to data/results/
+    stage_api_deploy.py  assemble the API + data folder that is deployed to Vercel
+  deploy/vercel-api/   Vercel entrypoint (index.py), pinned runtime requirements, Python version, vercel.json
+  tests/               offline pytest suite (fake providers, synthetic data, headless AppTest)
+  data/                raw/ constituent snapshot, processed/ Parquet files (downloaded, not committed)
+client/                Next.js frontend (App Router, Tailwind, shadcn/ui, lightweight-charts, Recharts)
 .github/workflows/
-  deploy-api.yml     weekday data update + API deploy to Vercel
-tests/               offline pytest suite (fake providers, synthetic data, headless AppTest)
+  deploy-api.yml       weekday data update + API deploy to Vercel
 ```
 
 To add a new data vendor, subclass `MarketDataProvider` and implement

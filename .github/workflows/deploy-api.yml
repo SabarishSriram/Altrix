@@ -1,8 +1,8 @@
 # Deploys the read-only Altrix API to Vercel with fresh market data.
 #
 # Weekdays after the NSE close: restore the stored Parquet files from the Actions cache,
-# fetch only new daily bars (scripts/download_data.py), stage the API with
-# scripts/stage_api_deploy.py and deploy that folder. Also runs when API code changes on
+# fetch only new daily bars (server/scripts/download_data.py), stage the API with
+# server/scripts/stage_api_deploy.py and deploy that folder. Also runs when API code changes on
 # main, and manually from the Actions tab (Run workflow).
 #
 # Needs repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID (README,
@@ -16,16 +16,16 @@ on:
   push:
     branches: [main]
     paths:
-      - "api/**"
-      - "src/**"
-      - "app/__init__.py"
-      - "app/dashboard.py"
-      - "app/scanner_ui.py"
-      - "deploy/vercel-api/**"
-      - "scripts/download_data.py"
-      - "scripts/stage_api_deploy.py"
-      - "data/raw/nifty100_constituents.csv"
-      - "requirements.txt"
+      - "server/api/**"
+      - "server/src/**"
+      - "server/app/__init__.py"
+      - "server/app/dashboard.py"
+      - "server/app/scanner_ui.py"
+      - "server/deploy/vercel-api/**"
+      - "server/scripts/download_data.py"
+      - "server/scripts/stage_api_deploy.py"
+      - "server/data/raw/nifty100_constituents.csv"
+      - "server/requirements.txt"
       - ".github/workflows/deploy-api.yml"
 
 concurrency:
@@ -59,6 +59,9 @@ jobs:
     if: needs.check.outputs.configured == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -68,8 +71,9 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"  # same as deploy/vercel-api/.python-version
+          python-version: "3.12"  # same as server/deploy/vercel-api/.python-version
           cache: pip
+          cache-dependency-path: server/requirements.txt
 
       - name: Install dependencies
         # The deploy pins as constraints, so the tests run on the versions Vercel installs.
@@ -82,8 +86,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            data/processed
-            data/raw
+            server/data/processed
+            server/data/raw
           key: market-data-${{ github.run_id }}
           restore-keys: market-data-
 
@@ -95,8 +99,8 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            data/processed
-            data/raw
+            server/data/processed
+            server/data/raw
           key: market-data-${{ github.run_id }}
 
       - name: Stage API
