@@ -317,6 +317,7 @@ class AltrixService:
             "pocket_pivot_count": flag("pocket_pivot"),
             "accumulation_count": flag("institutional_accumulation"),
             "active_10d_count": flag("smart_money_active_10d"),
+            "smart_money_buy_count": flag("smart_money_buy"),
             "delivery_spike_count": flag("delivery_spike"),
             "rules": {
                 "volume_window": sm.VOLUME_WINDOW,
@@ -340,6 +341,7 @@ class AltrixService:
                 "pocket_pivot": bool(row.pocket_pivot),
                 "institutional_accumulation": bool(row.institutional_accumulation),
                 "smart_money_active_10d": bool(row.smart_money_active_10d),
+                "smart_money_buy": bool(row.smart_money_buy),
                 "ema20": num(row.ema20),
                 "ema50": num(row.ema50),
                 "trend": row.trend,

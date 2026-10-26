@@ -15,7 +15,7 @@ import { displaySymbol, formatDate, formatPercent, formatPrice, formatRelative, 
 import { stockHref } from "@/lib/routes";
 import type { SmartMoneyResponse, SmartMoneyStock, Trend } from "@/lib/types";
 
-type Filter = "ALL" | "PIVOT" | "ACCUMULATION" | "ACTIVE";
+type Filter = "ALL" | "BUY" | "PIVOT" | "ACCUMULATION" | "ACTIVE";
 type SortKey =
   | "rank"
   | "symbol"
@@ -34,6 +34,7 @@ type Row = SmartMoneyStock & { rank: number };
 
 const FILTERS: { key: Filter; label: string; match: (s: SmartMoneyStock) => boolean; count: (d: SmartMoneyResponse) => number }[] = [
   { key: "ALL", label: "All stocks", match: () => true, count: (d) => d.stocks.length },
+  { key: "BUY", label: "Smart Money BUY", match: (s) => s.smart_money_buy, count: (d) => d.smart_money_buy_count },
   { key: "PIVOT", label: "Pocket pivots", match: (s) => s.pocket_pivot, count: (d) => d.pocket_pivot_count },
   { key: "ACCUMULATION", label: "Accumulation", match: (s) => s.institutional_accumulation, count: (d) => d.accumulation_count },
   { key: "ACTIVE", label: "Active in 10 days", match: (s) => s.smart_money_active_10d, count: (d) => d.active_10d_count },

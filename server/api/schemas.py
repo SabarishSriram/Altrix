@@ -204,6 +204,7 @@ class SmartMoneyStock(BaseModel):
     pocket_pivot: bool
     institutional_accumulation: bool
     smart_money_active_10d: bool
+    smart_money_buy: bool  # Smart Money filtered EMA 20/50 strategy signals BUY on this date
     ema20: float | None
     ema50: float | None
     trend: Trend
@@ -234,6 +235,7 @@ class SmartMoneyResponse(BaseModel):
     pocket_pivot_count: int
     accumulation_count: int
     active_10d_count: int
+    smart_money_buy_count: int
     delivery_spike_count: int
     rules: SmartMoneyRules
     stocks: list[SmartMoneyStock]

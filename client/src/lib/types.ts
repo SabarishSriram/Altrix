@@ -276,6 +276,8 @@ export interface SmartMoneyStock {
   pocket_pivot: boolean;
   institutional_accumulation: boolean;
   smart_money_active_10d: boolean;
+  /** The Smart Money filtered EMA 20/50 strategy signals BUY on this date. */
+  smart_money_buy: boolean;
   ema20: number | null;
   ema50: number | null;
   trend: Trend;
@@ -296,6 +298,7 @@ export interface SmartMoneyResponse {
   pocket_pivot_count: number;
   accumulation_count: number;
   active_10d_count: number;
+  smart_money_buy_count: number;
   delivery_spike_count: number;
   rules: {
     volume_window: number;

@@ -300,6 +300,7 @@ def test_smart_money_scanner(client):
     assert rows["BUYCO.NS"]["pocket_pivot"] is True and rows["BUYCO.NS"]["trend"] == "UPTREND"
     assert rows["NEWCO.NS"]["trend"] == "INSUFFICIENT_DATA"
     assert body["pocket_pivot_count"] == sum(s["pocket_pivot"] for s in stocks)
+    assert body["smart_money_buy_count"] == sum(s["smart_money_buy"] for s in stocks)
     assert {"close", "return_1d_pct", "clv", "deliv_spike_ratio", "delivery_spike"} <= set(stocks[0])
 
 

@@ -319,6 +319,7 @@ that fell out of the index since 2016 are missing.
 | `pocket_pivot` | up close, **and** volume above every down-day volume of the prior 10 trading days (0 if there were none), **and** `close >= 0.95 × EMA50` |
 | `institutional_accumulation` | up close, `vol_spike_ratio >= 2.0` and `clv >= 0.5` |
 | `smart_money_active_10d` | a pocket pivot or accumulation on any of the last 10 trading days (today included) |
+| `smart_money_buy` (scanner, API) | the Smart-money filtered EMA 20/50 strategy (below) signals BUY on that day |
 
 **Smart-money filtered EMA 20/50** (`generate_smart_money_signals`): the baseline SELL rule, but a BUY needs
 either an EMA20 ↑ EMA50 crossover **with** `smart_money_active_10d`, or a fresh pocket pivot that closes within
@@ -532,6 +533,13 @@ returns are fractions (0.05 = +5%), as in the backtester.
 - **Backtesting:** runs the existing backtester over the last 1, 2, 3, 5 or 10 years: metrics, equity curve, drawdown, trades,
   open positions. *Require 10-Day Smart Money Confirmation for EMA 20/50 Entry* runs the filtered strategy and adds a
   side-by-side comparison (CAGR, max drawdown, profit factor, win rate, expectancy, trade count) with the baseline.
+- **Investments:** a paper trading journal. *Today's signals to practise* lists the latest EMA BUY and Smart Money
+  BUY signals with a *Paper buy* button; the form records any stock (entry date, price: latest close or that day's
+  open, quantity: optionally sized at 10% of the paper portfolio like the backtest). Open positions show value and
+  unrealized P&L at the latest close and what Altrix says now (EMA SELL today, trend, Smart Money active); closed
+  trades show net P&L and return with the backtester's conventions (flat cost per BUY and SELL, return = net P&L ÷
+  cash spent on entry). The journal is stored **only in this browser** (`localStorage`), with Export / Import of a
+  JSON file as backup and a Reset. Nothing places real orders.
 - **Settings:** read-only view of the configuration that exists (API URL, data source, strategy rules,
   backtest defaults).
 - **Refresh** (top bar): *Rescan stored data*, or *Download new bars* (the same incremental downloader as
@@ -551,7 +559,9 @@ altrix-web  (Next.js, client/, deployed from GitHub on every push)
 
 Vercel Functions have no persistent disk and stop between requests, so the deployed API is **read-only**:
 `ALTRIX_OFFLINE=1` and `ALTRIX_DISABLE_DOWNLOAD=1` are set by `server/deploy/vercel-api/index.py`, and *Download new
-bars* is hidden. Fresh data comes from `.github/workflows/deploy-api.yml` instead. On weekdays at 18:00 IST it
+bars* is hidden. Fresh data comes from `.github/workflows/deploy-api.yml` instead. On weekdays at 18:00 IST, with backup runs at 21:00 IST
+and 08:00 IST the next morning (GitHub starts scheduled runs on a best-effort basis: they can be late or
+skipped, and a run with no new bars just redeploys the same data), it
 restores the stored Parquet files from the Actions cache, runs the tests, runs `scripts/download_data.py`
 (new bars only) and, best effort, `scripts/download_deliverables.py`, stages the API with `scripts/stage_api_deploy.py` and deploys it. It also runs on pushes to
 `main` that touch the API under `server/`, and from the Actions tab (*Run workflow*). The first run downloads the full 10 years.
@@ -590,7 +600,8 @@ The API runs in Mumbai (`bom1`, set in `server/deploy/vercel-api/vercel.json`).
 
 - The first request to a cold API instance scans every stock: about 5-15 s. A first 10-year backtest loads all
   the data: about 10 s. Later requests reuse the in-memory cache.
-- Data updates once per weekday, after GitHub starts the scheduled run (it can start late).
+- Data updates once per weekday, after GitHub starts a scheduled run (it can start late or be skipped; the backup
+  runs catch a missed one). To update immediately, run *Deploy API* from the Actions tab.
   *Refresh → Rescan stored data* still works but only re-reads the deployed data.
 - Only the origins in `ALTRIX_CORS_ORIGINS` can call the API, so Vercel preview deployments of the frontend
   can't call it unless you add their URLs.

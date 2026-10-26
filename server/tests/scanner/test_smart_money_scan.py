@@ -72,3 +72,20 @@ def test_deliverables_are_matched_on_the_same_date():
 
 def test_empty_input():
     assert scan_smart_money(pd.DataFrame()).empty
+
+
+def test_smart_money_buy_is_the_filtered_strategy_signal_on_the_scan_date():
+    from src.strategy.smart_money import generate_smart_money_signals
+
+    closes = [100.0] * 60 + [110 + i for i in range(10)]
+    frame = strategy(stock("X.NS", closes, [1000] * 70))
+    expected = bool(generate_smart_money_signals(frame)["buy_signal"].iloc[-1])
+    row = scan_smart_money(frame).iloc[0]
+    assert row["smart_money_buy"] == expected
+
+
+def test_stale_stock_never_shows_a_smart_money_buy():
+    fresh = stock("FRESH.NS", rising(), [1000] * 70)
+    stale = stock("STALE.NS", [100.0] * 60 + [110.0] * 9, [1000] * 69, dates=DATES[:-1])
+    out = scan_smart_money(strategy(stale, fresh)).set_index("symbol")
+    assert not out.loc["STALE.NS", "smart_money_buy"]

@@ -1,6 +1,6 @@
 """Smart Money scanner: each stock's institutional footprint on the latest trading day.
 
-    strategy frame (cleaned bars + EMA20/EMA50) -> add_smart_money_footprint -> latest row per stock
+    strategy frame (cleaned bars + EMA20/EMA50) -> generate_smart_money_signals -> latest row per stock
     + optional NSE deliverables (add_delivery_signals), matched on the same date
 
 Ranked by vol_spike_ratio, highest first (missing last, then by symbol). All
@@ -14,7 +14,7 @@ from __future__ import annotations
 import pandas as pd
 
 from src.data.deliverables import add_delivery_signals
-from src.strategy.smart_money import add_smart_money_footprint
+from src.strategy.smart_money import generate_smart_money_signals
 
 UPTREND = "UPTREND"  # EMA20 above EMA50
 DOWNTREND = "DOWNTREND"  # EMA20 at or below EMA50
@@ -23,12 +23,14 @@ NO_TREND = "INSUFFICIENT_DATA"  # fewer than 50 bars
 SMART_MONEY_COLUMNS = [
     "symbol", "name", "date", "close", "prev_close", "return_1d_pct", "volume",
     "vol_spike_ratio", "clv", "pocket_pivot", "institutional_accumulation", "smart_money_active_10d",
+    "smart_money_buy",  # the Smart Money filtered strategy's BUY signal on the scan date
     "ema20", "ema50", "trend",
     "deliv_qty", "deliv_per", "deliv_spike_ratio", "delivery_spike",
     "note",
 ]
 _DAY_VALUES = ["return_1d_pct", "vol_spike_ratio", "clv"]
-_DAY_FLAGS = ["pocket_pivot", "institutional_accumulation", "smart_money_active_10d", "delivery_spike"]
+_DAY_FLAGS = ["pocket_pivot", "institutional_accumulation", "smart_money_active_10d", "smart_money_buy",
+              "delivery_spike"]
 
 
 def scan_smart_money(
@@ -47,7 +49,7 @@ def scan_smart_money(
     """
     if strategy_frame.empty:
         return pd.DataFrame(columns=SMART_MONEY_COLUMNS)
-    fp = add_smart_money_footprint(strategy_frame)
+    fp = generate_smart_money_signals(strategy_frame).rename(columns={"buy_signal": "smart_money_buy"})
     fp["prev_close"] = fp.groupby("symbol", sort=False)["close"].shift(1)
     fp["return_1d_pct"] = (fp["close"] / fp["prev_close"] - 1) * 100
     as_of = fp["date"].max() if as_of is None else pd.Timestamp(as_of)
