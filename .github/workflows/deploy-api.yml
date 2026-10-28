@@ -59,6 +59,25 @@ jobs:
             echo "::notice::Vercel secrets are not set, so the API deploy is skipped. See README, Deployment."
           fi
 
+  keepalive:
+    # Supabase pauses free projects after a week without activity; one tiny request per scheduled run
+    # keeps the Investments journal database awake. Skipped until the two secrets exist. The
+    # publishable key goes only in the apikey header (it is not a JWT for Authorization).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::notice::Supabase secrets are not set, so the keep-alive is skipped."
+            exit 0
+          fi
+          curl -fsS -X POST "$SUPABASE_URL/rest/v1/rpc/keepalive" -d '{}' \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Content-Type: application/json"
+
   deploy:
     needs: check
     if: needs.check.outputs.configured == 'true'

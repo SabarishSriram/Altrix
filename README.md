@@ -496,6 +496,7 @@ data changes, so later requests are fast.
 | `ALTRIX_RAW_DIR` | API | `data/raw` | constituent snapshot folder |
 | `ALTRIX_OFFLINE` | API | unset | `1` = read the constituent list only from the local snapshot |
 | `ALTRIX_DELIVERABLES_DIR` | API | `data/deliverables` | optional NSE deliverables folder |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `client/.env.local` | unset | optional Supabase project for the cloud-synced Investments journal |
 | `ALTRIX_DISABLE_DOWNLOAD` | API | unset | `1` = reject `POST /api/refresh?download=true` with 403 and hide *Download new bars* in the web app (read-only deployments) |
 
 ### Endpoints
@@ -538,8 +539,9 @@ returns are fractions (0.05 = +5%), as in the backtester.
   open, quantity: optionally sized at 10% of the paper portfolio like the backtest). Open positions show value and
   unrealized P&L at the latest close and what Altrix says now (EMA SELL today, trend, Smart Money active); closed
   trades show net P&L and return with the backtester's conventions (flat cost per BUY and SELL, return = net P&L ÷
-  cash spent on entry). The journal is stored **only in this browser** (`localStorage`), with Export / Import of a
-  JSON file as backup and a Reset. Nothing places real orders.
+  cash spent on entry). The journal is stored in this browser (`localStorage`), or, once signed in, in Supabase and
+  synced across devices (see *Cloud sync for the Investments journal*). Export / Import of a JSON file and Reset
+  work in both modes. Nothing places real orders.
 - **Settings:** read-only view of the configuration that exists (API URL, data source, strategy rules,
   backtest defaults).
 - **Refresh** (top bar): *Rescan stored data*, or *Download new bars* (the same incremental downloader as
@@ -595,6 +597,33 @@ runs the tests on those exact versions with Python 3.12, the version Vercel uses
    changing it.
 
 The API runs in Mumbai (`bom1`, set in `server/deploy/vercel-api/vercel.json`).
+
+### Cloud sync for the Investments journal (Supabase, optional)
+
+Without configuration the paper journal lives in the browser's `localStorage`. With a free
+[Supabase](https://supabase.com) project it is stored in Postgres and syncs across devices: you sign in with a
+one-time email link (or the code in that email), and Row Level Security in `client/supabase/schema.sql` makes
+every row readable and writable only by its owner. The website talks to Supabase directly with the public
+publishable (anon) key; the Python API is not involved and stays read-only.
+
+1. Create a project at <https://supabase.com>.
+2. *SQL Editor → New query*: paste `client/supabase/schema.sql` and run it (safe to re-run).
+3. *Authentication → URL Configuration*: set **Site URL** to `https://<your-web-project>.vercel.app` and add
+   `https://<your-web-project>.vercel.app/investments` and `http://localhost:3000/investments` to **Redirect URLs**.
+4. Optional, for phones: *Authentication → Emails → Magic Link* template, add `{{ .Token }}` so the email also
+   contains a code you can type instead of tapping the link (useful when a mail app opens links in its own browser).
+5. *Project Settings → API Keys*: copy the **Project URL** and the **publishable key** (`sb_publishable_…`; a legacy
+   anon key also works as `NEXT_PUBLIC_SUPABASE_ANON_KEY`). Never use the secret (`sb_secret_…`) or `service_role`
+   key in the frontend. Add them as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   to the Vercel web project (and `client/.env.local` for local development), then redeploy the web project.
+6. Add the same two values as GitHub repository secrets `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. The `keepalive`
+   job in `deploy-api.yml` then calls `rpc/keepalive` on every scheduled run, because Supabase pauses free
+   projects after a week without activity.
+7. Sign in on the Investments tab. If this browser already has paper trades, *Move them to my account* uploads
+   them; the browser copy is cleared only after every trade is confirmed in the database. An exported JSON file
+   can be imported into the account from any device.
+8. Optional: after your first sign-in, *Authentication → Sign In / Providers*: turn off **Allow new users to sign
+   up**, so nobody else can create an account on your project.
 
 ### Limitations
 
