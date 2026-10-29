@@ -1,8 +1,8 @@
 // Supabase client for the cloud-synced paper journal (client/supabase/schema.sql).
 //
-// The publishable key (sb_publishable_..., or a legacy anon key) is public by design: Row Level
-// Security in the schema is what keeps each user's rows private. Without both variables the journal
-// stays in this browser only. Never put the secret / service_role key in the frontend.
+// Nobody signs in: the publishable key (sb_publishable_..., or a legacy anon key) reads and writes the one
+// shared journal, and the access-code page (src/proxy.ts) is the only gate. Without both variables the
+// journal stays in this browser only. Never put the secret / service_role key in the frontend.
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -19,15 +19,7 @@ export function supabase(): SupabaseClient | null {
     client =
       cloudConfigured && typeof window !== "undefined"
         ? createClient(URL!, ANON_KEY!, {
-            auth: {
-              // Implicit flow: the emailed link signs in whichever browser opens it (a phone's mail
-              // app included), unlike PKCE, which only works in the browser that asked for the link.
-              flowType: "implicit",
-              persistSession: true,
-              autoRefreshToken: true,
-              detectSessionInUrl: true,
-              storageKey: "altrix.auth",
-            },
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
           })
         : null;
   }

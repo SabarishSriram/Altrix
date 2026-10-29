@@ -5,7 +5,6 @@ import { useState } from "react";
 import { ChevronDown, CloudDownload, Menu, RefreshCw, RotateCw } from "lucide-react";
 import { cn } from "cn";
 
-import { DataStatus } from "@/components/layout/data-status";
 import { NavLinks, SidebarFooter, Wordmark } from "@/components/layout/sidebar";
 import { StockSearch } from "@/components/layout/stock-search";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -119,15 +118,6 @@ export function Topbar() {
         </div>
         <ThemeToggle />
         <RefreshMenu />
-      </div>
-      <div className="flex h-8 items-center gap-3 border-t bg-surface px-4 text-[11px] text-muted-foreground sm:px-6">
-        <span className="font-medium text-foreground/80">Historical daily data — not real-time</span>
-        <span className="hidden sm:inline" aria-hidden>·</span>
-        <span className="hidden truncate sm:inline">End-of-day prices. Signals use the day&apos;s close and are research only, not advice.</span>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="num sm:hidden">{scanner.data ? formatDate(scanner.data.data_as_of) : ""}</span>
-          <DataStatus compact />
-        </div>
       </div>
       <div className="border-t px-4 py-2 md:hidden">
         <StockSearch />

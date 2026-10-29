@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Cloud, Download, LogOut, Mail, Plus, RotateCcw, Upload } from "lucide-react";
+import { Cloud, Download, Plus, RotateCcw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
 
@@ -90,120 +90,31 @@ function AltrixStatus({ stock, sm }: { stock?: StockScan; sm?: SmartMoneyStock }
 }
 
 function SyncPanel({ pj }: { pj: PaperJournal }) {
-  const [email, setEmail] = useState("");
-  const [sentTo, setSentTo] = useState<string | null>(null);
-  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  if (pj.mode !== "cloud" || pj.localTrades === 0 || !pj.journal) return null;
 
-  if (!pj.cloudConfigured) return null;
-  if (!pj.authReady) return <Skeleton className="h-[58px] rounded-lg" />;
-
-  const run = async (fn: () => Promise<unknown>) => {
+  const move = async () => {
     setBusy(true);
     try {
-      await fn();
+      if (await pj.migrateLocal()) toast.success("Moved to the cloud journal", { description: "The browser copy was cleared after the upload was confirmed." });
     } finally {
       setBusy(false);
     }
   };
 
-  if (pj.email) {
-    return (
-      <div className="flex flex-col gap-3 rounded-lg border bg-card px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="flex items-center gap-2 text-[13px]">
-            <Cloud className="size-4 text-gain" aria-hidden />
-            <span>
-              Synced to your account <span className="font-medium">{pj.email}</span>: open Altrix on any device and sign in to see it.
-            </span>
-          </p>
-          <Button size="sm" variant="ghost" onClick={() => void pj.signOut()}>
-            <LogOut className="size-3.5" aria-hidden />
-            Sign out
-          </Button>
-        </div>
-        {pj.localTrades > 0 && pj.journal && (
-          <div className="flex flex-col gap-2 rounded-md border border-dashed bg-surface px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs">
-              This browser still has <span className="font-medium">{pj.localTrades} paper trade{pj.localTrades === 1 ? "" : "s"}</span> saved
-              locally from before you signed in.
-            </p>
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  if (await pj.migrateLocal()) toast.success("Moved to your account", { description: "The browser copy was cleared after the upload was confirmed." });
-                })
-              }
-            >
-              <Upload className="size-3.5" aria-hidden />
-              Move them to my account
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-lg border bg-card px-4 py-3">
-      {sentTo === null ? (
-        <form
-          className="flex flex-col gap-2 sm:flex-row sm:items-center"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const address = email.trim();
-            if (!address) return;
-            void run(async () => {
-              if (await pj.sendLink(address)) setSentTo(address);
-            });
-          }}
-        >
-          <p className="flex flex-1 items-center gap-2 text-[13px]">
-            <Cloud className="size-4 text-muted-foreground" aria-hidden />
-            Sign in to keep this journal in your account and use it on your phone and laptop.
-          </p>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            aria-label="Email address"
-            className={cn(inputClass, "font-sans sm:w-60")}
-          />
-          <Button type="submit" size="sm" disabled={busy}>
-            <Mail className="size-3.5" aria-hidden />
-            Email me a sign-in link
-          </Button>
-        </form>
-      ) : (
-        <form
-          className="flex flex-col gap-2 sm:flex-row sm:items-center"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run(() => pj.verifyCode(sentTo, code.trim()));
-          }}
-        >
-          <p className="flex-1 text-[13px]">
-            Sent to <span className="font-medium">{sentTo}</span>. Tap the link in the email, or type the code from it here.
-          </p>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6,10}"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Code"
-            aria-label="Sign-in code"
-            className={cn(inputClass, "sm:w-32")}
-          />
-          <Button type="submit" size="sm" disabled={busy || code.trim().length < 6}>Verify</Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setSentTo(null)}>Use another email</Button>
-        </form>
-      )}
+    <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="flex items-center gap-2 text-[13px]">
+        <Cloud className="size-4 text-muted-foreground" aria-hidden />
+        <span>
+          This browser still has <span className="font-medium">{pj.localTrades} paper trade{pj.localTrades === 1 ? "" : "s"}</span> saved
+          locally that aren&apos;t in the synced journal.
+        </span>
+      </p>
+      <Button size="sm" disabled={busy} onClick={() => void move()}>
+        <Upload className="size-3.5" aria-hidden />
+        Move them to the cloud journal
+      </Button>
     </div>
   );
 }
@@ -305,7 +216,7 @@ export function InvestmentsView() {
   const onImport = async (file: File) => {
     const parsed = parseJournal(await file.text());
     if (!parsed) return toast.error("That file isn't an Altrix paper journal export.");
-    const where = cloud ? "the journal in your account" : "the journal in this browser";
+    const where = cloud ? "the synced journal" : "the journal in this browser";
     if (window.confirm(`Replace ${where} (${journal.trades.length} trades) with the file (${parsed.trades.length} trades)?`)) {
       update(parsed);
       toast.success("Journal imported");
@@ -330,7 +241,7 @@ export function InvestmentsView() {
         Practise Altrix&apos;s signals with pretend money before risking real money. Record a trade when a signal appears, close it
         when the strategy says SELL, and compare your results with the backtest.{" "}
         {cloud ? (
-          <>Trades are saved <span className="font-medium text-foreground">in your account</span> and sync across your devices.</>
+          <>Trades are saved <span className="font-medium text-foreground">in the cloud</span> and sync across your devices.</>
         ) : (
           <>Trades are saved <span className="font-medium text-foreground">only in this browser</span>; export a backup now and then.</>
         )}
@@ -339,11 +250,11 @@ export function InvestmentsView() {
       {cloud && pj.journal === null ? (
         pj.cloudError ? (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-loss/40 bg-loss-soft px-4 py-3 text-[13px] text-loss">
-            Couldn&apos;t load your journal: {pj.cloudError}
+            Couldn&apos;t load the journal: {pj.cloudError}
             <Button size="sm" variant="outline" onClick={pj.reloadCloud}>Retry</Button>
           </div>
         ) : (
-          <Skeleton className="h-[420px] rounded-lg" aria-label="Loading your journal" />
+          <Skeleton className="h-[420px] rounded-lg" aria-label="Loading the journal" />
         )
       ) : (
       <>
@@ -593,7 +504,7 @@ export function InvestmentsView() {
         title="Journal settings and backup"
         description={
           cloud
-            ? "Saved in your account. Export a file any time to keep your own backup."
+            ? "Synced across your devices. Export a file any time to keep your own backup."
             : "Saved in this browser only. Export a file to keep a backup or move the journal to another device."
         }
         actions={
@@ -610,7 +521,7 @@ export function InvestmentsView() {
               size="sm"
               variant="ghost"
               onClick={() => {
-                const where = cloud ? " from your account on every device" : "";
+                const where = cloud ? " from the synced journal on every device" : "";
                 if (window.confirm(`Delete every paper trade${where} and start over? Export a backup first if you might want them.`)) update(emptyJournal());
               }}
             >

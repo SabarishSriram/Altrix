@@ -1,4 +1,4 @@
-// Reads and writes the paper journal in Supabase (tables in client/supabase/schema.sql).
+// Reads and writes the shared paper journal in Supabase (tables in client/supabase/schema.sql).
 //
 // The journal page edits a whole Journal value at a time; saveCloudJournal turns the change from
 // `prev` to `next` into row inserts, updates and deletes, so adding, closing, deleting, importing,
@@ -9,7 +9,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { emptyJournal, type Journal, type PaperTrade, type TradeSource } from "@/lib/paper-journal";
 
 interface TradeRow {
-  user_id?: string;
   id: string;
   symbol: string;
   quantity: number;
@@ -22,8 +21,7 @@ interface TradeRow {
   updated_at?: string;
 }
 
-const toRow = (t: PaperTrade, userId: string): TradeRow => ({
-  user_id: userId,
+const toRow = (t: PaperTrade): TradeRow => ({
   id: t.id,
   symbol: t.symbol,
   quantity: t.quantity,
@@ -50,14 +48,14 @@ const fromRow = (r: TradeRow): PaperTrade => ({
 
 export interface CloudJournal {
   journal: Journal;
-  /** False until the user's settings row exists (a brand-new account). */
+  /** False until the settings row exists (schema.sql creates it on its first run). */
   hasSettings: boolean;
 }
 
 export async function loadCloudJournal(sb: SupabaseClient): Promise<CloudJournal> {
   const [settings, trades] = await Promise.all([
-    sb.from("paper_journals").select("starting_cash, cost_rate").maybeSingle(),
-    sb.from("paper_trades").select("id, symbol, quantity, entry_date, entry_price, exit_date, exit_price, source, note").order("created_at"),
+    sb.from("journal_settings").select("starting_cash, cost_rate").eq("id", 1).maybeSingle(),
+    sb.from("journal_trades").select("id, symbol, quantity, entry_date, entry_price, exit_date, exit_price, source, note").order("created_at"),
   ]);
   if (settings.error) throw settings.error;
   if (trades.error) throw trades.error;
@@ -74,17 +72,12 @@ export async function loadCloudJournal(sb: SupabaseClient): Promise<CloudJournal
 }
 
 /** Write the difference between `prev` (what the database holds) and `next`. */
-export async function saveCloudJournal(
-  sb: SupabaseClient,
-  userId: string,
-  prev: CloudJournal,
-  next: Journal,
-): Promise<void> {
+export async function saveCloudJournal(sb: SupabaseClient, prev: CloudJournal, next: Journal): Promise<void> {
   const before = prev.journal;
   if (!prev.hasSettings || before.startingCash !== next.startingCash || before.costRate !== next.costRate) {
-    const { error } = await sb.from("paper_journals").upsert(
-      { user_id: userId, starting_cash: next.startingCash, cost_rate: next.costRate, updated_at: new Date().toISOString() },
-      { onConflict: "user_id" },
+    const { error } = await sb.from("journal_settings").upsert(
+      { id: 1, starting_cash: next.startingCash, cost_rate: next.costRate, updated_at: new Date().toISOString() },
+      { onConflict: "id" },
     );
     if (error) throw error;
   }
@@ -95,16 +88,16 @@ export async function saveCloudJournal(
   const removed = before.trades.filter((t) => !keep.has(t.id)).map((t) => t.id);
 
   if (changed.length) {
-    const { error } = await sb.from("paper_trades").upsert(changed.map((t) => toRow(t, userId)), { onConflict: "user_id,id" });
+    const { error } = await sb.from("journal_trades").upsert(changed.map(toRow), { onConflict: "id" });
     if (error) throw error;
   }
   if (removed.length) {
-    const { error } = await sb.from("paper_trades").delete().in("id", removed);
+    const { error } = await sb.from("journal_trades").delete().in("id", removed);
     if (error) throw error;
   }
 }
 
-/** `cloud` plus every local trade it doesn't have yet; local settings win only for a new account. */
+/** `cloud` plus every local trade it doesn't have yet; local settings win only before the settings row exists. */
 export function mergeLocalIntoCloud(cloud: CloudJournal, local: Journal): Journal {
   const have = new Set(cloud.journal.trades.map((t) => t.id));
   return {
