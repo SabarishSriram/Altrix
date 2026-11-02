@@ -1,6 +1,6 @@
 # Deploys the read-only Altrix API to Vercel with fresh market data.
 #
-# Weekdays after the NSE close: restore the stored Parquet files from the Actions cache,
+# Weekdays at 16:15 IST, after the NSE close: restore the stored Parquet files from the Actions cache,
 # fetch only new daily bars (server/scripts/download_data.py), stage the API with
 # server/scripts/stage_api_deploy.py and deploy that folder. Also runs when API code changes on
 # main, and manually from the Actions tab (Run workflow).
@@ -13,7 +13,8 @@ on:
   # GitHub runs schedules on a best-effort basis: runs can start late or be skipped. The backup runs
   # catch a missed one; a run with no new bars just redeploys the same data.
   schedule:
-    - cron: "30 12 * * 1-5"  # 18:00 IST Mon-Fri, after the NSE close
+    - cron: "45 10 * * 1-5"  # 16:15 IST Mon-Fri, after the NSE close (bars count as final from 16:00)
+    - cron: "30 12 * * 1-5"  # 18:00 IST Mon-Fri, backup
     - cron: "30 15 * * 1-5"  # 21:00 IST Mon-Fri, backup
     - cron: "30 2 * * 2-6"   # 08:00 IST Tue-Sat, backup for the previous trading day
   workflow_dispatch:
