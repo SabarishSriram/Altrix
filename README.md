@@ -5,7 +5,7 @@ Altrix is a Python quantitative trading platform for Indian equities, built in s
 ```
 NIFTY 100 → market data → feature engineering → ML models → backtesting → live dashboard → automated trading
                 ▲
-          you are here (Step 1)
+          you are here
 ```
 
 **Step 1 (this repo today)** is the market-data ingestion layer. It finds the current NIFTY 100
